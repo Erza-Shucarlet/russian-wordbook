@@ -7,6 +7,7 @@ import os
 import sys
 import json
 import random
+import time
 import webbrowser
 import threading
 import logger
@@ -29,6 +30,36 @@ STATIC_DIR = _get_static_dir()
 app = Flask(__name__)
 
 
+# ─── 浏览器心跳与自动退出 ─────────────────────────────────────
+
+_HEARTBEAT_TIMEOUT_SECONDS = 90
+_HEARTBEAT_CHECK_SECONDS = 10
+_last_heartbeat = 0.0
+_heartbeat_monitor_started = False
+_heartbeat_lock = threading.Lock()
+
+
+def _heartbeat_monitor():
+    """浏览器关闭后自动退出本地服务"""
+    while True:
+        time.sleep(_HEARTBEAT_CHECK_SECONDS)
+        with _heartbeat_lock:
+            last = _last_heartbeat
+        if last and time.time() - last > _HEARTBEAT_TIMEOUT_SECONDS:
+            logger.info("浏览器心跳超时，自动退出本地服务")
+            os._exit(0)
+
+
+def _touch_heartbeat():
+    """记录前端心跳，并按需启动监控线程"""
+    global _last_heartbeat, _heartbeat_monitor_started
+    with _heartbeat_lock:
+        _last_heartbeat = time.time()
+        if not _heartbeat_monitor_started:
+            threading.Thread(target=_heartbeat_monitor, daemon=True).start()
+            _heartbeat_monitor_started = True
+
+
 @app.route('/')
 def index():
     return send_from_directory(STATIC_DIR, 'index.html')
@@ -38,6 +69,13 @@ def index():
 @app.route('/<path:filename>')
 def static_files(filename):
     return send_from_directory(STATIC_DIR, filename)
+
+
+@app.route('/api/heartbeat', methods=['POST'])
+def heartbeat():
+    """前端页面心跳；心跳停止一段时间后服务自动退出"""
+    _touch_heartbeat()
+    return jsonify({"ok": True})
 
 
 # ─── 设置 ─────────────────────────────────────────────────────
@@ -438,7 +476,7 @@ def learn_batch():
     data = request.get_json() or {}
     level = data.get('level', 'catti3')
     learn_type = data.get('type', 'word')
-    count = data.get('count', 10)
+    count = max(1, min(int(data.get('count', 10)), 10))
 
     try:
         if learn_type == 'word':
@@ -572,7 +610,7 @@ def get_logs():
 
 @app.route('/api/version', methods=['GET'])
 def get_version():
-    return jsonify({"version": "1.04"})
+    return jsonify({"version": "1.09"})
 
 
 @app.route('/api/stats', methods=['GET'])

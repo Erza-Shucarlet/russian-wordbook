@@ -4,17 +4,22 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>小陈陈的俄语单词本</title>
-<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/style.css?v=1.09">
 </head>
 <body>
 
-<header>
-  <h1>📖 小陈陈的俄语单词本 <span style="font-size:0.55em;color:var(--accent);font-weight:400;margin-left:6px">v1.04</span></h1>
-  <button id="api-status-btn" class="api-status" title="点击设置 DeepSeek API Key">
-    <span id="api-status-icon">⚠️</span>
-    <span id="api-status-text">未激活</span>
-  </button>
-  <button id="feedback-btn" class="feedback-btn" title="反馈错误">🐛 反馈</button>
+<header class="app-header">
+  <div class="brand">
+    <h1>小陈陈的俄语单词本</h1>
+    <span id="version-text" class="version-badge">v1.09</span>
+  </div>
+  <div class="header-actions">
+    <button id="api-status-btn" class="api-status" title="点击设置 DeepSeek API Key">
+      <span id="api-status-icon">⚠️</span>
+      <span id="api-status-text">未激活</span>
+    </button>
+    <button id="feedback-btn" class="feedback-btn" title="反馈错误">反馈</button>
+  </div>
 </header>
 
 <!-- API Key 设置弹窗 -->
@@ -32,11 +37,11 @@
 </div>
 
 <nav class="tabs">
-  <button class="tab active" data-tab="add-entry">📝 录入</button>
-  <button class="tab" data-tab="word-list">📚 单词库</button>
-  <button class="tab" data-tab="sentence-list">📚 句式库</button>
-  <button class="tab" data-tab="review">🎯 复习模式</button>
-  <button class="tab" data-tab="learn">📖 学习</button>
+  <button class="tab active" data-tab="add-entry">录入</button>
+  <button class="tab" data-tab="word-list">单词库</button>
+  <button class="tab" data-tab="sentence-list">句式库</button>
+  <button class="tab" data-tab="review">复习</button>
+  <button class="tab" data-tab="learn">学习</button>
 </nav>
 
 <main>
@@ -45,7 +50,7 @@
   <section id="tab-add-entry" class="tab-content active">
     <div class="form-card">
       <h2>录入俄语内容</h2>
-      <p class="hint">输入俄语单词或句子，系统自动识别并处理（单词→翻译+例句，句子→纠错+翻译）</p>
+      <p class="hint">输入单词或句子，自动完成翻译、纠错和例句整理。</p>
       <div class="form-row">
         <input type="text" id="entry-input" placeholder="输入俄语单词或句子，如 книга 或 Я читаю книгу" autofocus>
         <button id="add-entry-btn" class="btn-primary">录入</button>
@@ -59,8 +64,8 @@
     <div class="search-bar">
       <input type="text" id="word-search" placeholder="搜索单词（俄语或中文）...">
       <span id="word-count"></span>
-      <button id="dedup-words-btn" class="btn-small" style="background:var(--accent)">合并重复</button>
-      <button id="retro-examples-btn" class="btn-small" style="background:var(--accent)">一键例句</button>
+      <button id="dedup-words-btn" class="btn-small btn-tool">合并重复</button>
+      <button id="retro-examples-btn" class="btn-small btn-tool">一键例句</button>
     </div>
     <div id="word-list-container" class="list-container"></div>
   </section>
@@ -70,8 +75,8 @@
     <div class="search-bar">
       <input type="text" id="sentence-search" placeholder="搜索句式...">
       <span id="sentence-count"></span>
-      <button id="dedup-sentences-btn" class="btn-small" style="background:var(--accent)">合并重复</button>
-      <button id="retro-correct-btn" class="btn-small" style="background:var(--accent)">纠正语法</button>
+      <button id="dedup-sentences-btn" class="btn-small btn-tool">合并重复</button>
+      <button id="retro-correct-btn" class="btn-small btn-tool">纠正语法</button>
     </div>
     <div id="sentence-list-container" class="list-container"></div>
   </section>
@@ -88,8 +93,8 @@
         <div class="question-text" id="question-text"></div>
         <div class="options" id="options-container"></div>
         <div id="review-feedback"></div>
-        <div style="text-align:center;margin-top:8px">
-          <button id="stop-review-btn" class="btn-small" style="background:var(--muted)">停止本轮</button>
+        <div class="center-actions">
+          <button id="stop-review-btn" class="btn-small btn-muted">停止本轮</button>
         </div>
       </div>
     </div>
@@ -114,8 +119,8 @@
         <div class="question-text" id="learn-question-text"></div>
         <div class="options" id="learn-options"></div>
         <div id="learn-feedback"></div>
-        <div style="margin-top:8px">
-          <button id="stop-learn-btn" class="btn-small" style="background:var(--muted)">停止</button>
+        <div class="learn-stop-actions">
+          <button id="stop-learn-btn" class="btn-small btn-muted">停止</button>
         </div>
       </div>
     </div>
@@ -123,6 +128,6 @@
 
 </main>
 
-<script src="/script.js?v=1.04"></script>
+<script src="/script.js?v=1.09"></script>
 </body>
 </html>

@@ -105,6 +105,7 @@ def generate_word_batch(level: str, exclude_words: list[str], count: int = 10) -
 要求：
 - 每题一个俄语单词和其正确中文翻译，再加 2 个合理但错误的中文干扰项
 - 必须使用简体中文
+- 中文选项要简短，优先使用 2-8 个汉字
 - 单词的难度、长度应符合{level_desc}标准
 - 避开已有单词：[{exclude_list}]
 - 返回 JSON 数组：[{{"russian": "单词", "options": ["干扰1", "正确翻译", "干扰2"], "correct_index": 1}}]
@@ -122,6 +123,7 @@ def generate_sentence_batch(level: str, exclude_sentences: list[str], count: int
 要求：
 - 每题一个俄语句子和其正确中文翻译，再加 2 个合理但错误的中文干扰项
 - 必须使用简体中文
+- 中文选项要简洁，不要解释语法
 - 句子的难度、复杂度应符合{level_desc}标准
 - 避开已有句子：[{exclude_list}]
 - 返回 JSON 数组：[{{"russian": "俄语句子", "options": ["干扰1", "正确翻译", "干扰2"], "correct_index": 1}}]

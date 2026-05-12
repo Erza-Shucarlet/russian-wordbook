@@ -42,29 +42,51 @@ def _weighted_choice(items: list[dict]) -> dict:
     return items[-1]
 
 
-def _generate_options(correct_item: dict, all_items: list[dict], key_field: str, count: int = 3) -> list[str]:
+def _answer_value(item: dict, key_field: str, fallback_field: str | None = None) -> str:
+    """取选项文本；主字段为空时可回退到另一个字段"""
+    value = item.get(key_field) or ''
+    if not value and fallback_field:
+        value = item.get(fallback_field) or ''
+    if not value and fallback_field == 'corrected':
+        value = item.get('original') or ''
+    return value
+
+
+def _has_enough_distinct_options(items: list[dict], key_field: str, count: int = 3, fallback_field: str | None = None) -> bool:
+    """判断某类题是否有足够的不同选项"""
+    values = {_answer_value(it, key_field, fallback_field) for it in items}
+    values.discard('')
+    return len(values) >= count
+
+
+def _generate_options(correct_item: dict, all_items: list[dict], key_field: str, count: int = 3, fallback_field: str | None = None) -> list[str]:
     """
     生成选择题选项（含 1 个正确 + 2 个干扰项）
     过滤掉与正确答案值相同的干扰项，避免重复选项
     """
-    correct_value = correct_item[key_field]
+    correct_value = _answer_value(correct_item, key_field, fallback_field)
+    if not correct_value:
+        return []
+
     # 从其他条目中选干扰项，排除翻译相同的
-    others = [it for it in all_items if it['id'] != correct_item['id'] and it[key_field] != correct_value]
-    if len(others) < count - 1:
-        distractors = [it[key_field] for it in others]
-    else:
-        distractors = [it[key_field] for it in random.sample(others, count - 1)]
+    other_values = []
+    seen = {correct_value}
+    for it in all_items:
+        if it['id'] == correct_item['id']:
+            continue
+        value = _answer_value(it, key_field, fallback_field)
+        if value and value not in seen:
+            seen.add(value)
+            other_values.append(value)
+
+    if len(other_values) < count - 1:
+        return []
+
+    distractors = random.sample(other_values, count - 1)
 
     options = [correct_value] + distractors
-    # 二次去重（安全网）
-    seen = set()
-    unique = []
-    for o in options:
-        if o not in seen:
-            seen.add(o)
-            unique.append(o)
-    random.shuffle(unique)
-    return unique
+    random.shuffle(options)
+    return options
 
 
 def select_question() -> dict | None:
@@ -84,16 +106,20 @@ def select_question() -> dict | None:
     data = db.get_all_items()
     words = data['words']
     sentences = data['sentences']
+    review_words = [w for w in words if w.get('russian') and w.get('chinese')]
+    review_sentences = [s for s in sentences if (s.get('corrected') or s.get('original')) and s.get('chinese')]
 
     if not words and not sentences:
         return None
 
     # 决定题目类型：优先有数据的类型
     types = []
-    if words:
-        types.extend(['word_ru_to_zh', 'word_zh_to_ru'])
-    if sentences:
-        types.extend(['sentence_ru_to_zh'])
+    if _has_enough_distinct_options(review_words, 'chinese'):
+        types.append('word_ru_to_zh')
+    if _has_enough_distinct_options(review_words, 'russian'):
+        types.append('word_zh_to_ru')
+    if _has_enough_distinct_options(review_sentences, 'chinese'):
+        types.append('sentence_ru_to_zh')
 
     if not types:
         return None
@@ -101,25 +127,21 @@ def select_question() -> dict | None:
     qtype = random.choice(types)
 
     if qtype in ('word_ru_to_zh', 'word_zh_to_ru'):
-        correct = _weighted_choice(words)
+        correct = _weighted_choice(review_words)
         if not correct:
             return None
 
         if qtype == 'word_ru_to_zh':
             question = correct['russian']
             correct_answer = correct['chinese']
-            if not correct_answer:
-                correct_answer = correct['russian']
-            options = _generate_options(correct, words, 'chinese')
+            options = _generate_options(correct, review_words, 'chinese')
             if not options:
                 return None
             question_label = f"请选择 '{question}' 的中文意思"
         else:
             question = correct['chinese']
-            if not question:
-                question = correct['russian']
             correct_answer = correct['russian']
-            options = _generate_options(correct, words, 'russian')
+            options = _generate_options(correct, review_words, 'russian')
             if not options:
                 return None
             question_label = f"请选择 '{question}' 对应的俄语单词"
@@ -142,37 +164,41 @@ def select_question() -> dict | None:
         }
 
     elif qtype == 'sentence_ru_to_zh':
-        correct = _weighted_choice(sentences)
+        correct = _weighted_choice(review_sentences)
         if not correct:
             return None
 
         question = correct['corrected'] or correct['original']
         correct_answer = correct['chinese']
-        if not correct_answer:
-            correct_answer = question
+
+        options = []
 
         # 优先使用缓存干扰项
         cached = db.get_sentence_distractors(correct['id'])
         if cached and len(cached) >= 2:
-            options = [correct_answer] + cached
-            random.shuffle(options)
-        else:
+            candidate = [correct_answer] + [x for x in cached if x and x != correct_answer][:2]
+            if len(candidate) == 3:
+                options = candidate
+                random.shuffle(options)
+
+        if not options:
             # 尝试 AI 生成干扰项
             try:
                 if deepseek_client.get_api_key():
                     ai_distractors = deepseek_client.generate_distractors(question, correct_answer)
-                    if ai_distractors and len(ai_distractors) >= 2:
+                    candidate = [correct_answer] + [x for x in (ai_distractors or []) if x and x != correct_answer][:2]
+                    if len(candidate) == 3:
                         db.save_sentence_distractors(correct['id'], ai_distractors[:2])
-                        options = [correct_answer] + ai_distractors[:2]
+                        options = candidate
                         random.shuffle(options)
                     else:
-                        options = _generate_options(correct, sentences, 'chinese')
+                        options = _generate_options(correct, review_sentences, 'chinese')
                 else:
-                    options = _generate_options(correct, sentences, 'chinese')
+                    options = _generate_options(correct, review_sentences, 'chinese')
             except Exception:
-                options = _generate_options(correct, sentences, 'chinese')
+                options = _generate_options(correct, review_sentences, 'chinese')
 
-        if not options or len(options) < 2:
+        if not options or len(options) != 3:
             return None
 
         question_label = f"请选择俄语句子的中文翻译"

@@ -17,6 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initDedupButtons();
   initLearn();
   initFeedback();
+  initHeartbeat();
   checkSettings();
   loadVersion();
 });
@@ -48,6 +49,29 @@ async function api(method, url, body = null) {
   if (body) opts.body = JSON.stringify(body);
   const resp = await fetch(url, opts);
   return resp.json();
+}
+
+function initHeartbeat() {
+  const send = () => {
+    fetch('/api/heartbeat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+      keepalive: true,
+    }).catch(() => {});
+  };
+  send();
+  setInterval(send, 10000);
+}
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  }[c]));
 }
 
 // ─── 设置 ──────────────────────────────
@@ -170,36 +194,36 @@ async function addEntry() {
 
   const area = document.getElementById('entry-result');
   if (result.error) {
-    area.innerHTML = `<div class="error-msg">${result.error}</div>`;
+    area.innerHTML = `<div class="error-msg">${escapeHtml(result.error)}</div>`;
   } else if (result.type === 'word') {
     let exHtml = '';
     if (result.examples && result.examples.length > 0) {
       exHtml = '<div class="examples">' +
-        result.examples.map(e => `<div class="example-item">📖 ${e.ru}<br>　 ${e.zh}</div>`).join('') +
+        result.examples.map(e => `<div class="example-item">📖 ${escapeHtml(e.ru)}<br>　 ${escapeHtml(e.zh)}</div>`).join('') +
         '</div>';
     }
     area.innerHTML = `
       ${result.is_corrected ? `<div class="corrected-note">✏️ 拼写已修正：</div>` : ''}
-      <div class="word-display">${result.russian}</div>
-      ${result.is_corrected ? `<div style="font-size:0.85rem;color:var(--muted);text-decoration:line-through;margin-bottom:4px">原始：${result.original}</div>` : ''}
-      <div class="chinese-display">${result.chinese}</div>
+      <div class="word-display">${escapeHtml(result.russian)}</div>
+      ${result.is_corrected ? `<div class="original-note">原始：${escapeHtml(result.original)}</div>` : ''}
+      <div class="chinese-display">${escapeHtml(result.chinese)}</div>
       ${exHtml}
-      <div style="font-size:0.8rem;color:var(--success);margin-top:6px">✅ 已添加到单词库</div>
+      <div class="success-note">✅ 已添加到单词库</div>
     `;
   } else {
     let exHtml = '';
     if (result.examples && result.examples.length > 0) {
       exHtml = '<div class="examples">' +
-        result.examples.map(e => `<div class="example-item">💡 ${e.ru}<br>　 ${e.zh}</div>`).join('') +
+        result.examples.map(e => `<div class="example-item">💡 ${escapeHtml(e.ru)}<br>　 ${escapeHtml(e.zh)}</div>`).join('') +
         '</div>';
     }
     area.innerHTML = `
       ${result.is_corrected ? `<div class="corrected-note">✏️ 语法已修正：</div>` : ''}
-      <div class="word-display">${result.corrected}</div>
-      ${result.is_corrected ? `<div style="font-size:0.85rem;color:var(--muted);text-decoration:line-through;margin-bottom:4px">原始：${result.original}</div>` : ''}
-      <div class="chinese-display">${result.chinese}</div>
+      <div class="word-display">${escapeHtml(result.corrected)}</div>
+      ${result.is_corrected ? `<div class="original-note">原始：${escapeHtml(result.original)}</div>` : ''}
+      <div class="chinese-display">${escapeHtml(result.chinese)}</div>
       ${exHtml}
-      <div style="font-size:0.8rem;color:var(--success);margin-top:6px">✅ 已添加到句式库</div>
+      <div class="success-note">✅ 已添加到句式库</div>
     `;
   }
 
@@ -217,7 +241,7 @@ async function loadWords() {
   document.getElementById('word-count').textContent = `${data.words.length} 个单词`;
 
   if (data.words.length === 0) {
-    container.innerHTML = '<div style="text-align:center;color:var(--muted);padding:40px">暂无单词，去「录入生词」添加吧</div>';
+    container.innerHTML = '<div class="empty-state">暂无单词，去「录入」添加吧</div>';
     return;
   }
 
@@ -225,22 +249,22 @@ async function loadWords() {
     let exHtml = '';
     if (w.examples && w.examples.length > 0) {
       exHtml = '<div class="item-examples">' +
-        w.examples.map(e => `📖 ${e.ru}<br>　 ${e.zh}`).join('<br>') +
+        w.examples.map(e => `📖 ${escapeHtml(e.ru)}<br>　 ${escapeHtml(e.zh)}`).join('<br>') +
         '</div>';
     }
     return `
       <div class="list-item">
         <div class="item-head">
           <div>
-            <div class="item-main">${w.russian}</div>
-            <div class="item-translation">${w.chinese}</div>
+            <div class="item-main">${escapeHtml(w.russian)}</div>
+            <div class="item-translation">${escapeHtml(w.chinese)}</div>
           </div>
-          <button class="btn-small" onclick="deleteWord(${w.id})">删除</button>
+          <button class="btn-small btn-danger" onclick="deleteWord(${Number(w.id)})">删除</button>
         </div>
         ${exHtml}
         <div class="item-stats">
-          <span class="correct">✅ ${w.correct_count}</span>
-          <span class="wrong">❌ ${w.wrong_count}</span>
+          <span class="correct">✅ ${Number(w.correct_count) || 0}</span>
+          <span class="wrong">❌ ${Number(w.wrong_count) || 0}</span>
         </div>
       </div>
     `;
@@ -280,7 +304,7 @@ function initDedupButtons() {
     input.style.display = 'none';
     actions.style.display = 'none';
     overlay.style.display = 'flex';
-    msg.innerHTML = '正在检查... <button id="abort-examples-btn" style="margin-top:8px;padding:6px 16px;background:#ccc;border:none;border-radius:6px;cursor:pointer">停止</button>';
+    msg.innerHTML = '正在检查... <button id="abort-examples-btn" class="btn-small btn-muted progress-stop-btn">停止</button>';
     let aborted = false;
     document.getElementById('abort-examples-btn').addEventListener('click', () => { aborted = true; });
 
@@ -302,7 +326,7 @@ function initDedupButtons() {
     const total = list.words.length;
     for (const w of list.words) {
       if (aborted) break;
-      msg.innerHTML = `⏳ 正在生成例句（${done + 1}/${total}）<br><span style="font-size:0.85rem;opacity:0.7">${w.russian}</span><br><button id="abort-examples-btn" style="margin-top:6px;padding:4px 14px;background:#ccc;border:none;border-radius:6px;cursor:pointer;font-size:0.85rem">停止</button>`;
+      msg.innerHTML = `⏳ 正在生成例句（${done + 1}/${total}）<br><span class="progress-word">${escapeHtml(w.russian)}</span><br><button id="abort-examples-btn" class="btn-small btn-muted progress-stop-btn">停止</button>`;
       document.getElementById('abort-examples-btn').addEventListener('click', () => { aborted = true; });
       await api('POST', `/api/words/retro-example/${w.id}`);
       done++;
@@ -337,7 +361,7 @@ async function loadSentences() {
   document.getElementById('sentence-count').textContent = `${data.sentences.length} 个句式`;
 
   if (data.sentences.length === 0) {
-    container.innerHTML = '<div style="text-align:center;color:var(--muted);padding:40px">暂无句式，去「录入句式」添加吧</div>';
+    container.innerHTML = '<div class="empty-state">暂无句式，去「录入」添加吧</div>';
     return;
   }
 
@@ -346,23 +370,23 @@ async function loadSentences() {
     let exHtml = '';
     if (s.examples && s.examples.length > 0) {
       exHtml = '<div class="item-examples">' +
-        s.examples.map(e => `💡 ${e.ru}<br>　 ${e.zh}`).join('<br>') +
+        s.examples.map(e => `💡 ${escapeHtml(e.ru)}<br>　 ${escapeHtml(e.zh)}`).join('<br>') +
         '</div>';
     }
     return `
       <div class="list-item">
         <div class="item-head">
           <div>
-            <div class="item-main">${s.corrected || s.original}</div>
-            ${isCorrected ? `<div style="font-size:0.8rem;color:var(--muted)">原始：${s.original}</div>` : ''}
-            <div class="item-translation">${s.chinese}</div>
+            <div class="item-main">${escapeHtml(s.corrected || s.original)}</div>
+            ${isCorrected ? `<div class="sentence-original">原始：${escapeHtml(s.original)}</div>` : ''}
+            <div class="item-translation">${escapeHtml(s.chinese)}</div>
           </div>
-          <button class="btn-small" onclick="deleteSentence(${s.id})">删除</button>
+          <button class="btn-small btn-danger" onclick="deleteSentence(${Number(s.id)})">删除</button>
         </div>
         ${exHtml}
         <div class="item-stats">
-          <span class="correct">✅ ${s.correct_count}</span>
-          <span class="wrong">❌ ${s.wrong_count}</span>
+          <span class="correct">✅ ${Number(s.correct_count) || 0}</span>
+          <span class="wrong">❌ ${Number(s.wrong_count) || 0}</span>
         </div>
       </div>
     `;
@@ -412,12 +436,13 @@ async function startReview() {
 async function loadNextQuestion() {
   const data = await api('POST', '/api/review/start');
   if (data.done) {
-    document.getElementById('review-question').innerHTML = `
-      <div style="text-align:center;padding:40px;color:var(--muted)">
-        <p style="font-size:1.2rem">🎉 暂无复习内容</p>
-        <p>请先录入单词或句式</p>
-      </div>
-    `;
+    document.getElementById('question-label').textContent = '';
+    document.getElementById('question-text').textContent = '暂无复习内容';
+    document.getElementById('options-container').innerHTML = '';
+    document.getElementById('review-feedback').innerHTML =
+      '<button class="btn-primary" onclick="startReview()">再试一次</button>';
+    document.getElementById('review-feedback').className = '';
+    document.getElementById('stop-review-btn').style.display = 'none';
     return;
   }
   renderQuestion(data.question);
@@ -433,7 +458,7 @@ function renderQuestion(q) {
   const labels = ['A', 'B', 'C'];
   container.innerHTML = q.options.map((opt, i) => `
     <button class="option-btn" data-index="${i}" onclick="submitAnswer(${i})">
-      ${labels[i]}. ${opt}
+      ${labels[i]}. ${escapeHtml(opt)}
     </button>
   `).join('');
 
@@ -519,10 +544,21 @@ let learnState = null;  // {russian, options, correct_index, type}
 
 function initLearn() {
   document.querySelectorAll('.learn-tab').forEach(tab => {
-    tab.addEventListener('click', () => {
+    tab.addEventListener('click', async () => {
+      const nextType = tab.dataset.learn;
+      if (nextType === learnTypeCache) return;
+
+      if (learnState) {
+        learnStateCache[learnTypeCache] = learnState;
+      }
+
       document.querySelectorAll('.learn-tab').forEach(t => t.classList.remove('active'));
       tab.classList.add('active');
-      learnTypeCache = tab.dataset.learn;
+      learnTypeCache = nextType;
+
+      if (isLearnRunning()) {
+        await switchLearnType(nextType);
+      }
     });
   });
 
@@ -536,27 +572,55 @@ let learnPool = { word: [], sentence: [] };
 let learnStateCache = { word: null, sentence: null };
 let learnTypeCache = 'word';
 let learnLevelCache = 'catti3';
-let poolLoading = false;
+let poolLoading = { word: false, sentence: false };
+let learnAutoNextTimer = null;
+const LEARN_INITIAL_COUNT = 3;
+const LEARN_REFILL_COUNT = 8;
+const LEARN_LOW_WATER = 3;
 
-async function fillLearnPool() {
-  if (poolLoading) return;
-  poolLoading = true;
+function isLearnRunning() {
+  return document.getElementById('learn-question-area').style.display !== 'none'
+    && document.getElementById('start-learn-btn').style.display === 'none';
+}
+
+function clearLearnAutoNext() {
+  if (learnAutoNextTimer) {
+    clearTimeout(learnAutoNextTimer);
+    learnAutoNextTimer = null;
+  }
+}
+
+function showLearnLoading(message = '正在生成题目') {
+  const questionEl = document.getElementById('learn-question-text');
+  questionEl.classList.remove('long-question');
+  questionEl.innerHTML = `
+    <span class="loading-text">${escapeHtml(message)}<span class="loading-dots"><span></span><span></span><span></span></span></span>
+    <span class="loading-bar"></span>
+  `;
+}
+
+async function fillLearnPool(count = LEARN_REFILL_COUNT, requestType = learnTypeCache, requestLevel = learnLevelCache) {
+  if (poolLoading[requestType]) return 0;
+  poolLoading[requestType] = true;
+  const beforeCount = learnPool[requestType].length;
+  let timeout = null;
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30000);
+    timeout = setTimeout(() => controller.abort(), 25000);
     const resp = await fetch('/api/learn/batch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ level: learnLevelCache, type: learnTypeCache, count: 10 }),
+      body: JSON.stringify({ level: requestLevel, type: requestType, count }),
       signal: controller.signal,
     });
-    clearTimeout(timeout);
     const result = await resp.json();
     if (result.questions) {
-      learnPool[learnTypeCache].push(...result.questions);
+      learnPool[requestType].push(...result.questions);
     }
   } catch (e) {}
-  poolLoading = false;
+  if (timeout) clearTimeout(timeout);
+  poolLoading[requestType] = false;
+  return learnPool[requestType].length - beforeCount;
 }
 
 function nextFromPool() {
@@ -566,9 +630,10 @@ function nextFromPool() {
 }
 
 async function startLearn() {
+  clearLearnAutoNext();
   learnTotal = 0;
   learnCorrect = 0;
-  poolLoading = false;
+  poolLoading = { word: false, sentence: false };
   learnTypeCache = document.querySelector('.learn-tab.active').dataset.learn;
   learnLevelCache = document.getElementById('learn-level').value;
 
@@ -581,36 +646,67 @@ async function startLearn() {
   document.getElementById('learn-feedback').innerHTML = '';
   document.getElementById('learn-feedback').className = '';
   document.getElementById('stop-learn-btn').style.display = '';
-  document.getElementById('learn-question-text').textContent = '⏳ 正在生成题目...';
+  showLearnLoading();
   document.getElementById('learn-options').innerHTML = '';
 
-  // 预加载题目池
-  if (learnPool[learnTypeCache].length < 3) {
-    await fillLearnPool();
+  // 首屏只生成少量题，先把第一题显示出来；后续题目后台补充。
+  if (learnPool[learnTypeCache].length === 0) {
+    await fillLearnPool(LEARN_INITIAL_COUNT);
   }
 
   const q = nextFromPool() || (await fillLearnPool(), nextFromPool());
   if (!q) {
     document.getElementById('start-learn-btn').style.display = '';
-    document.getElementById('learn-question-area').style.display = 'none';
     document.getElementById('learn-question-text').textContent = '出题失败，请检查网络或 API Key';
+    document.getElementById('learn-question-text').classList.remove('long-question');
+    document.getElementById('learn-options').innerHTML = '';
     return;
   }
 
   // 后台补充池子
-  if (learnPool[learnTypeCache].length < 3) fillLearnPool();
+  if (learnPool[learnTypeCache].length < LEARN_LOW_WATER) fillLearnPool(LEARN_REFILL_COUNT);
 
   learnState = q;
   learnStateCache[learnTypeCache] = q;
   showLearnQuestion(q);
 }
 
-function showLearnQuestion(q) {
-  document.getElementById('learn-question-text').textContent = q.russian;
-  const labels = ['A', 'B', 'C'];
-  document.getElementById('learn-options').innerHTML = q.options.map((opt, i) => `
-    <button class="option-btn" onclick="submitLearn(${i})">${labels[i]}. ${opt}</button>
-  `).join('');
+async function switchLearnType(nextType) {
+  clearLearnAutoNext();
+  learnTypeCache = nextType;
+  learnLevelCache = document.getElementById('learn-level').value;
+  document.getElementById('learn-feedback').innerHTML = '';
+  document.getElementById('learn-feedback').className = '';
+  document.getElementById('stop-learn-btn').style.display = '';
+
+  const cached = learnStateCache[nextType];
+  if (cached) {
+    learnState = cached;
+    showLearnQuestion(cached);
+    return;
+  }
+
+  let q = nextFromPool();
+  if (!q) {
+    showLearnLoading();
+    document.getElementById('learn-options').innerHTML = '';
+    await fillLearnPool(LEARN_INITIAL_COUNT, nextType, learnLevelCache);
+    q = nextFromPool();
+  }
+
+  if (q) {
+    learnState = q;
+    learnStateCache[nextType] = q;
+    showLearnQuestion(q);
+    if (learnPool[nextType].length < LEARN_LOW_WATER) {
+      fillLearnPool(LEARN_REFILL_COUNT, nextType, learnLevelCache);
+    }
+  } else {
+    learnState = null;
+    document.getElementById('learn-question-text').textContent = '出题失败，请检查网络或 API Key';
+    document.getElementById('learn-question-text').classList.remove('long-question');
+    document.getElementById('learn-options').innerHTML = '';
+  }
 }
 
 async function nextLearnQuestion() {
@@ -618,10 +714,10 @@ async function nextLearnQuestion() {
   document.getElementById('learn-feedback').className = '';
   document.getElementById('stop-learn-btn').style.display = '';
 
-  if (learnPool[learnTypeCache].length < 3) {
-    document.getElementById('learn-question-text').textContent = '⏳ 补充题目...';
+  if (learnPool[learnTypeCache].length === 0) {
+    showLearnLoading('正在补充题目');
     document.getElementById('learn-options').innerHTML = '';
-    await fillLearnPool();
+    await fillLearnPool(LEARN_INITIAL_COUNT);
   }
 
   const q = nextFromPool();
@@ -629,6 +725,9 @@ async function nextLearnQuestion() {
     learnState = q;
     learnStateCache[learnTypeCache] = q;
     showLearnQuestion(q);
+    if (learnPool[learnTypeCache].length < LEARN_LOW_WATER) {
+      fillLearnPool(LEARN_REFILL_COUNT);
+    }
   } else {
     document.getElementById('start-learn-btn').style.display = '';
     document.getElementById('learn-question-area').style.display = 'none';
@@ -636,11 +735,18 @@ async function nextLearnQuestion() {
 }
 
 function showLearnQuestion(q) {
-  document.getElementById('learn-question-text').textContent = q.russian;
+  const questionEl = document.getElementById('learn-question-text');
+  questionEl.textContent = q.russian;
+  questionEl.classList.toggle('long-question', isLongQuestion(q.russian));
   const labels = ['A', 'B', 'C'];
   document.getElementById('learn-options').innerHTML = q.options.map((opt, i) => `
-    <button class="option-btn" onclick="submitLearn(${i})">${labels[i]}. ${opt}</button>
+    <button class="option-btn" onclick="submitLearn(${i})">${labels[i]}. ${escapeHtml(opt)}</button>
   `).join('');
+}
+
+function isLongQuestion(text) {
+  const value = String(text || '').trim();
+  return value.includes(' ') || value.length > 24;
 }
 
 async function submitLearn(chosen) {
@@ -672,18 +778,24 @@ async function submitLearn(chosen) {
     fb.innerHTML = '✅ 正确！';
   } else {
     fb.className = 'wrong';
-    fb.innerHTML = `❌ 错误<br>正确：${result.correct_chinese}${result.saved ? '<br>📝 已自动录入' : ''}`;
+    fb.innerHTML = `❌ 错误<br>正确：${escapeHtml(result.correct_chinese)}${result.saved ? '<br>📝 已自动录入' : ''}`;
   }
 
   document.getElementById('stop-learn-btn').style.display = 'none';
   // 自动跳转下一题
-  setTimeout(() => nextLearnQuestion(), 800);
+  clearLearnAutoNext();
+  learnAutoNextTimer = setTimeout(() => {
+    learnAutoNextTimer = null;
+    nextLearnQuestion();
+  }, 800);
 }
 
 function stopLearn() {
+  clearLearnAutoNext();
   learnState = null;
   learnStateCache[learnTypeCache] = null;
   learnPool = { word: [], sentence: [] };
+  poolLoading = { word: false, sentence: false };
   const total = learnTotal;
   const correct = learnCorrect;
   const rate = total > 0 ? Math.round(correct / total * 100) : 0;
@@ -703,6 +815,7 @@ function stopLearn() {
   document.getElementById('learn-options').innerHTML = '';
   document.getElementById('learn-feedback').innerHTML = `<button class="btn-primary" onclick="startLearn()">继续学习</button>`;
   document.getElementById('learn-feedback').className = '';
+  document.getElementById('stop-learn-btn').style.display = 'none';
   learnTotal = 0;
   learnCorrect = 0;
 }
