@@ -1,5 +1,5 @@
 """
-俄语单词本 — DeepSeek API 客户端
+小陈陈的俄语单词本 — DeepSeek API 客户端
 用于俄语翻译、例句生成、语法纠错
 """
 
@@ -104,10 +104,11 @@ def generate_word_batch(level: str, exclude_words: list[str], count: int = 10) -
     system = f"""你是俄语教学专家。请一次生成 {count} 道{level_desc}俄语单词翻译选择题。
 要求：
 - 每题一个俄语单词和其正确中文翻译，再加 2 个合理但错误的中文干扰项
+- 必须使用简体中文
 - 单词的难度、长度应符合{level_desc}标准
 - 避开已有单词：[{exclude_list}]
-- 返回 JSON 数组：[{{"russian": "单词", "options": ["正确翻译", "干扰1", "干扰2"], "correct_index": 0}}]
-- correct_index 是 options 中正确翻译的索引，打乱选项顺序"""
+- 返回 JSON 数组：[{{"russian": "单词", "options": ["干扰1", "正确翻译", "干扰2"], "correct_index": 1}}]
+- 正确翻译必须随机放在 options 的不同位置，correct_index 必须准确对应"""
 
     return _call_deepseek(system, f"请生成{count}道{level_desc}俄语单词选择题")
 
@@ -120,10 +121,11 @@ def generate_sentence_batch(level: str, exclude_sentences: list[str], count: int
     system = f"""你是俄语教学专家。请一次生成 {count} 道{level_desc}俄语句子翻译选择题。
 要求：
 - 每题一个俄语句子和其正确中文翻译，再加 2 个合理但错误的中文干扰项
+- 必须使用简体中文
 - 句子的难度、复杂度应符合{level_desc}标准
 - 避开已有句子：[{exclude_list}]
-- 返回 JSON 数组：[{{"russian": "俄语句子", "options": ["正确翻译", "干扰1", "干扰2"], "correct_index": 0}}]
-- correct_index 是 options 中正确翻译的索引，打乱选项顺序"""
+- 返回 JSON 数组：[{{"russian": "俄语句子", "options": ["干扰1", "正确翻译", "干扰2"], "correct_index": 1}}]
+- 正确翻译必须随机放在 options 的不同位置，correct_index 必须准确对应"""
 
     return _call_deepseek(system, f"请生成{count}道{level_desc}俄语句子选择题")
 

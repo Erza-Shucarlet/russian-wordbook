@@ -3,13 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>俄语单词本</title>
+<title>小陈陈的俄语单词本</title>
 <link rel="stylesheet" href="/style.css">
 </head>
 <body>
 
 <header>
-  <h1>📖 俄语单词本 <span style="font-size:0.55em;color:var(--accent);font-weight:400;margin-left:6px">v1.04</span></h1>
+  <h1>📖 小陈陈的俄语单词本 <span style="font-size:0.55em;color:var(--accent);font-weight:400;margin-left:6px">v1.04</span></h1>
   <button id="api-status-btn" class="api-status" title="点击设置 DeepSeek API Key">
     <span id="api-status-icon">⚠️</span>
     <span id="api-status-text">未激活</span>
@@ -60,6 +60,7 @@
       <input type="text" id="word-search" placeholder="搜索单词（俄语或中文）...">
       <span id="word-count"></span>
       <button id="dedup-words-btn" class="btn-small" style="background:var(--accent)">合并重复</button>
+      <button id="retro-examples-btn" class="btn-small" style="background:var(--accent)">一键例句</button>
     </div>
     <div id="word-list-container" class="list-container"></div>
   </section>
@@ -114,7 +115,6 @@
         <div class="options" id="learn-options"></div>
         <div id="learn-feedback"></div>
         <div style="margin-top:8px">
-          <button id="next-learn-btn" class="btn-primary" style="display:none">下一题</button>
           <button id="stop-learn-btn" class="btn-small" style="background:var(--muted)">停止</button>
         </div>
       </div>

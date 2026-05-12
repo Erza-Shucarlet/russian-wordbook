@@ -1,5 +1,5 @@
 """
-俄语单词本 — 数据库层
+小陈陈的俄语单词本 — 数据库层
 SQLite 存储单词、句式及答题统计
 """
 
@@ -171,6 +171,17 @@ def get_untranslated_words() -> list:
     ).fetchall()
     conn.close()
     return [_row_to_dict(r) for r in rows]
+
+
+def update_word_examples(word_id: int, examples: list):
+    """更新单词的例句"""
+    conn = get_conn()
+    conn.execute(
+        "UPDATE words SET examples = ? WHERE id = ?",
+        (json.dumps(examples, ensure_ascii=False), word_id)
+    )
+    conn.commit()
+    conn.close()
 
 
 def update_word_translation(word_id: int, chinese: str, examples: list):

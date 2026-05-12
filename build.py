@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-俄语单词本 — PyInstaller 打包脚本
+小陈陈的俄语单词本 — PyInstaller 打包脚本
 运行: python3 build.py
-输出: dist/俄语单词本.app （可压缩发给别人，双击即用）
+输出: dist/小陈陈的俄语单词本.app （可压缩发给别人，双击即用）
 """
 
 import subprocess
@@ -36,7 +36,7 @@ subprocess.run(['rm', '-rf', 'build', 'dist'], check=False)
 print("🔨 开始打包 (约 1-2 分钟)...")
 cmd = [
     py, '-m', 'PyInstaller',
-    '--name', '俄语单词本',
+    '--name', '小陈陈的俄语单词本',
     '--add-data', f'static:static',
     '--onedir',
     '--windowed',
@@ -51,10 +51,10 @@ subprocess.run(['rm', '-rf', 'build'], check=False)
 print()
 print("=" * 50)
 print("✅ 打包完成！")
-print(f"   App: {os.path.abspath('dist/俄语单词本.app')}")
+print(f"   App: {os.path.abspath('dist/小陈陈的俄语单词本.app')}")
 print()
 print("📤 发送给别人：")
-print("   1. 右键 dist/俄语单词本.app → 压缩")
+print("   1. 右键 dist/小陈陈的俄语单词本.app → 压缩")
 print("   2. 对方解压后双击 .app 即可使用")
 print("   3. 首次启动自动在 ~/.russian-wordbook/ 创建数据库")
 print("=" * 50)

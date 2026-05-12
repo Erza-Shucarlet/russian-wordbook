@@ -263,6 +263,58 @@ function initDedupButtons() {
     loadSentences();
   });
 
+  document.getElementById('retro-examples-btn').addEventListener('click', async () => {
+    if (!confirm('为缺少例句的单词批量生成例句？会调用 DeepSeek API')) return;
+
+    // 显示进度遮罩（隐藏设置表单）
+    const overlay = document.getElementById('settings-overlay');
+    const modal = document.querySelector('.settings-modal');
+    const h3 = modal.querySelector('h3');
+    const hint = modal.querySelector('.hint');
+    const input = document.getElementById('api-key-input');
+    const actions = document.querySelector('.settings-actions');
+    const msg = document.getElementById('settings-msg');
+
+    h3.style.display = 'none';
+    hint.style.display = 'none';
+    input.style.display = 'none';
+    actions.style.display = 'none';
+    overlay.style.display = 'flex';
+    msg.innerHTML = '正在检查... <button id="abort-examples-btn" style="margin-top:8px;padding:6px 16px;background:#ccc;border:none;border-radius:6px;cursor:pointer">停止</button>';
+    let aborted = false;
+    document.getElementById('abort-examples-btn').addEventListener('click', () => { aborted = true; });
+
+    const list = await api('POST', '/api/words/retro-examples');
+    const restoreSettings = () => {
+      h3.style.display = '';
+      hint.style.display = '';
+      input.style.display = '';
+      actions.style.display = '';
+    };
+
+    if (!list.words || list.words.length === 0) {
+      msg.innerHTML = '✅ 所有单词已有例句';
+      setTimeout(() => { overlay.style.display = 'none'; restoreSettings(); }, 1500);
+      return;
+    }
+
+    let done = 0;
+    const total = list.words.length;
+    for (const w of list.words) {
+      if (aborted) break;
+      msg.innerHTML = `⏳ 正在生成例句（${done + 1}/${total}）<br><span style="font-size:0.85rem;opacity:0.7">${w.russian}</span><br><button id="abort-examples-btn" style="margin-top:6px;padding:4px 14px;background:#ccc;border:none;border-radius:6px;cursor:pointer;font-size:0.85rem">停止</button>`;
+      document.getElementById('abort-examples-btn').addEventListener('click', () => { aborted = true; });
+      await api('POST', `/api/words/retro-example/${w.id}`);
+      done++;
+    }
+
+    msg.innerHTML = aborted
+      ? `⏹ 已停止（已完成 ${done}/${total}）`
+      : `✅ 完成！已为 ${done} 个单词生成例句`;
+    setTimeout(() => { overlay.style.display = 'none'; restoreSettings(); }, 1500);
+    loadWords();
+  });
+
   document.getElementById('retro-correct-btn').addEventListener('click', async () => {
     if (!confirm('一键纠正所有句式的语法？会调用 DeepSeek API')) return;
     const r = await api('POST', '/api/sentences/retro-correct');
@@ -475,7 +527,6 @@ function initLearn() {
   });
 
   document.getElementById('start-learn-btn').addEventListener('click', startLearn);
-  document.getElementById('next-learn-btn').addEventListener('click', nextLearnQuestion);
   document.getElementById('stop-learn-btn').addEventListener('click', stopLearn);
 }
 
@@ -529,7 +580,6 @@ async function startLearn() {
   document.getElementById('learn-question-area').style.display = 'block';
   document.getElementById('learn-feedback').innerHTML = '';
   document.getElementById('learn-feedback').className = '';
-  document.getElementById('next-learn-btn').style.display = 'none';
   document.getElementById('stop-learn-btn').style.display = '';
   document.getElementById('learn-question-text').textContent = '⏳ 正在生成题目...';
   document.getElementById('learn-options').innerHTML = '';
@@ -566,7 +616,6 @@ function showLearnQuestion(q) {
 async function nextLearnQuestion() {
   document.getElementById('learn-feedback').innerHTML = '';
   document.getElementById('learn-feedback').className = '';
-  document.getElementById('next-learn-btn').style.display = 'none';
   document.getElementById('stop-learn-btn').style.display = '';
 
   if (learnPool[learnTypeCache].length < 3) {
@@ -626,8 +675,9 @@ async function submitLearn(chosen) {
     fb.innerHTML = `❌ 错误<br>正确：${result.correct_chinese}${result.saved ? '<br>📝 已自动录入' : ''}`;
   }
 
-  document.getElementById('next-learn-btn').style.display = '';
   document.getElementById('stop-learn-btn').style.display = 'none';
+  // 自动跳转下一题
+  setTimeout(() => nextLearnQuestion(), 800);
 }
 
 function stopLearn() {
@@ -653,7 +703,6 @@ function stopLearn() {
   document.getElementById('learn-options').innerHTML = '';
   document.getElementById('learn-feedback').innerHTML = `<button class="btn-primary" onclick="startLearn()">继续学习</button>`;
   document.getElementById('learn-feedback').className = '';
-  document.getElementById('next-learn-btn').style.display = 'none';
   learnTotal = 0;
   learnCorrect = 0;
 }

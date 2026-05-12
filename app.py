@@ -1,5 +1,5 @@
 """
-俄语单词本 — Flask 后端
+小陈陈的俄语单词本 — Flask 后端
 支持 PyInstaller 打包后独立运行
 """
 
@@ -265,6 +265,35 @@ def retro_correct():
     })
 
 
+@app.route('/api/words/retro-examples', methods=['POST'])
+def retro_examples():
+    """为缺少例句的单词补生成例句（返回列表供前端逐条处理）"""
+    words = db.get_words(limit=9999)
+    no_examples = [{"id": w['id'], "russian": w['russian']} for w in words if not w.get('examples') or len(w['examples']) == 0]
+    return jsonify({"ok": True, "words": no_examples})
+
+
+@app.route('/api/words/retro-example/<int:word_id>', methods=['POST'])
+def retro_example_one(word_id):
+    """为单个单词生成例句"""
+    if not deepseek_client.get_api_key():
+        return jsonify({"error": "请先设置 API Key"}), 400
+
+    try:
+        words = db.get_words(limit=9999)
+        word = next((w for w in words if w['id'] == word_id), None)
+        if not word:
+            return jsonify({"error": "单词不存在"}), 404
+
+        result = deepseek_client.translate_word(word['russian'])
+        examples = result.get('examples', [])
+        if examples:
+            db.update_word_examples(word_id, examples)
+        return jsonify({"ok": True, "has_examples": len(examples) > 0})
+    except Exception:
+        return jsonify({"ok": False})
+
+
 @app.route('/api/words/retro-translate', methods=['POST'])
 def retro_translate():
     """补译所有缺少中文翻译的单词"""
@@ -422,8 +451,16 @@ def learn_batch():
             questions = deepseek_client.generate_sentence_batch(level, existing_list, count)
 
         # 添加 type 字段
+        # 安全网：后端始终打乱选项顺序，避免 AI 把正确答案放在固定位置
         for q in questions:
             q['type'] = learn_type
+            opts = q.get('options', [])
+            if len(opts) >= 3:
+                correct_idx = q.get('correct_index', 0)
+                correct_val = opts[correct_idx] if correct_idx < len(opts) else opts[0]
+                random.shuffle(opts)
+                q['correct_index'] = opts.index(correct_val)
+                q['options'] = opts
 
         logger.info(f"学习批量生成完成: {len(questions)} 题")
         return jsonify({"ok": True, "questions": questions})
@@ -552,14 +589,14 @@ def _open_browser():
 
 
 def main():
-    logger.info("俄语单词本 启动")
+    logger.info("小陈陈的俄语单词本 启动")
     db.init_db()
     logger.info(f"数据库路径: {db.DB_PATH}")
     # 启动时加载持久化的 API Key
     saved_key = _load_api_key()
     if saved_key:
         deepseek_client.set_api_key(saved_key)
-    print("📖 俄语单词本 已启动")
+    print("📖 小陈陈的俄语单词本 已启动")
     print("   打开浏览器访问 http://127.0.0.1:8910")
     # 自动打开浏览器
     threading.Timer(1.0, _open_browser).start()
