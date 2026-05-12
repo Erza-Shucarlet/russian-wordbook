@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.02 (2026-05-12)
+
+### 新增
+- API Key 输入隐藏到设置弹窗，主界面仅显示激活状态徽章
+- 设置 API Key 后自动补译之前录入的未翻译单词
+- CHANGELOG.md 版本变更记录
+
+### 变更
+- DeepSeek 模型从 chat (Pro) 切换为 flash，降低 API 成本
+
+### 修复
+- GitHub Release 包名改为 ASCII（RussianWordbook_v1.01.zip），避免 gh CLI 截断中文
+
+---
+
 ## v1.01 (2026-05-12)
 
 ### 新增
