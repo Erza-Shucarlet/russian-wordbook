@@ -129,6 +129,36 @@ def list_words():
     return jsonify({"words": words})
 
 
+@app.route('/api/words/retro-translate', methods=['POST'])
+def retro_translate():
+    """补译所有缺少中文翻译的单词"""
+    if not deepseek_client.get_api_key():
+        return jsonify({"error": "请先设置 API Key"}), 400
+
+    untranslated = db.get_untranslated_words()
+    if not untranslated:
+        return jsonify({"ok": True, "translated": 0, "message": "所有单词已有翻译"})
+
+    translated = 0
+    for word in untranslated:
+        try:
+            result = deepseek_client.translate_word(word['russian'])
+            db.update_word_translation(
+                word['id'],
+                result.get('chinese', ''),
+                result.get('examples', [])
+            )
+            translated += 1
+        except Exception as e:
+            pass  # 跳过翻译失败的单词
+
+    return jsonify({
+        "ok": True,
+        "translated": translated,
+        "total": len(untranslated),
+    })
+
+
 @app.route('/api/words/<int:word_id>', methods=['DELETE'])
 def remove_word(word_id):
     db.delete_word(word_id)
@@ -226,6 +256,11 @@ def review_answer():
 
 
 # ─── 统计 API ─────────────────────────────────────────────────
+
+@app.route('/api/version', methods=['GET'])
+def get_version():
+    return jsonify({"version": "1.03"})
+
 
 @app.route('/api/stats', methods=['GET'])
 def get_stats():

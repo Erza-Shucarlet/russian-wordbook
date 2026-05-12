@@ -9,13 +9,26 @@
 <body>
 
 <header>
-  <h1>📖 俄语单词本</h1>
-  <div class="api-settings">
-    <input type="password" id="api-key-input" placeholder="DeepSeek API Key（可选）">
-    <button id="save-key-btn">保存</button>
-    <span id="key-status"></span>
-  </div>
+  <h1>📖 俄语单词本 <span style="font-size:0.55em;color:var(--accent);font-weight:400;margin-left:6px">v1.03</span></h1>
+  <button id="api-status-btn" class="api-status" title="点击设置 DeepSeek API Key">
+    <span id="api-status-icon">⚠️</span>
+    <span id="api-status-text">未激活</span>
+  </button>
 </header>
+
+<!-- API Key 设置弹窗 -->
+<div id="settings-overlay" class="overlay" style="display:none">
+  <div class="settings-modal">
+    <h3>DeepSeek API 设置</h3>
+    <p class="hint">输入 API Key 后自动翻译俄语单词和句式。使用 Flash 模型，成本极低。</p>
+    <input type="password" id="api-key-input" placeholder="sk-...">
+    <div class="settings-actions">
+      <button id="save-key-btn" class="btn-primary">保存并激活</button>
+      <button id="close-settings-btn" class="btn-secondary">取消</button>
+    </div>
+    <div id="settings-msg"></div>
+  </div>
+</div>
 
 <nav class="tabs">
   <button class="tab active" data-tab="add-word">📝 录入生词</button>
