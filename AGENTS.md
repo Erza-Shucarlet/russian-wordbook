@@ -269,11 +269,18 @@ else:
 ```
 打包后数据库存在 `~/.russian-wordbook/data/`，确保数据跨版本持久化。
 
+### Release 产物命名规则
+
+- **GitHub Release 附件必须使用 ASCII 文件名**（英文、数字、下划线、连字符）
+- 中文文件名会被 `gh` CLI 截断或损坏（如 `俄语单词本_v1.01.zip` → `_v1.01.zip`）
+- 格式：`ProjectName_vX.XX.zip`（如 `RussianWordbook_v1.01.zip`）
+- PyInstaller `--name` 参数可以使用中文（仅作为 macOS `.app` 显示名），但用于 CLI 操作的文件一律用 ASCII
+
 ### 交付
 
 ```bash
-# 压缩 .app
-cd dist && zip -r 俄语单词本.zip 俄语单词本.app
+# 压缩 .app（注意：zip 文件名必须用 ASCII）
+cd dist && zip -r RussianWordbook_v1.01.zip 俄语单词本.app
 ```
 
 对方解压后双击 `.app` 即可使用，无需安装 Python 或任何依赖。
