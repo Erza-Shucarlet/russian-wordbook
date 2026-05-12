@@ -40,7 +40,6 @@ cmd = [
     '--add-data', f'static:static',
     '--onedir',
     '--windowed',
-    '--clean',
     '--noconfirm',
     'app.py',
     '--exclude-module', 'tkinter',

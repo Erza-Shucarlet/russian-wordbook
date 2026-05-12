@@ -9,11 +9,12 @@
 <body>
 
 <header>
-  <h1>📖 俄语单词本 <span style="font-size:0.55em;color:var(--accent);font-weight:400;margin-left:6px">v1.03</span></h1>
+  <h1>📖 俄语单词本 <span style="font-size:0.55em;color:var(--accent);font-weight:400;margin-left:6px">v1.04</span></h1>
   <button id="api-status-btn" class="api-status" title="点击设置 DeepSeek API Key">
     <span id="api-status-icon">⚠️</span>
     <span id="api-status-text">未激活</span>
   </button>
+  <button id="feedback-btn" class="feedback-btn" title="反馈错误">🐛 反馈</button>
 </header>
 
 <!-- API Key 设置弹窗 -->
@@ -31,38 +32,25 @@
 </div>
 
 <nav class="tabs">
-  <button class="tab active" data-tab="add-word">📝 录入生词</button>
-  <button class="tab" data-tab="add-sentence">📝 录入句式</button>
+  <button class="tab active" data-tab="add-entry">📝 录入</button>
   <button class="tab" data-tab="word-list">📚 单词库</button>
   <button class="tab" data-tab="sentence-list">📚 句式库</button>
   <button class="tab" data-tab="review">🎯 复习模式</button>
+  <button class="tab" data-tab="learn">📖 学习</button>
 </nav>
 
 <main>
 
-  <!-- ====== 录入生词 ====== -->
-  <section id="tab-add-word" class="tab-content active">
+  <!-- ====== 统一录入 ====== -->
+  <section id="tab-add-entry" class="tab-content active">
     <div class="form-card">
-      <h2>录入俄语生词</h2>
-      <p class="hint">输入俄语单词（一格形式），系统自动获取中文翻译和例句</p>
+      <h2>录入俄语内容</h2>
+      <p class="hint">输入俄语单词或句子，系统自动识别并处理（单词→翻译+例句，句子→纠错+翻译）</p>
       <div class="form-row">
-        <input type="text" id="word-input" placeholder="输入俄语单词，如 книга" autofocus>
-        <button id="add-word-btn" class="btn-primary">录入</button>
+        <input type="text" id="entry-input" placeholder="输入俄语单词或句子，如 книга 或 Я читаю книгу" autofocus>
+        <button id="add-entry-btn" class="btn-primary">录入</button>
       </div>
-      <div id="word-result" class="result-area"></div>
-    </div>
-  </section>
-
-  <!-- ====== 录入句式 ====== -->
-  <section id="tab-add-sentence" class="tab-content">
-    <div class="form-card">
-      <h2>录入俄语句式</h2>
-      <p class="hint">输入俄语句子，系统自动修正语法并给出中文翻译</p>
-      <div class="form-row">
-        <input type="text" id="sentence-input" placeholder="输入俄语句子，如 Я читаю книга">
-        <button id="add-sentence-btn" class="btn-primary">录入</button>
-      </div>
-      <div id="sentence-result" class="result-area"></div>
+      <div id="entry-result" class="result-area"></div>
     </div>
   </section>
 
@@ -71,6 +59,7 @@
     <div class="search-bar">
       <input type="text" id="word-search" placeholder="搜索单词（俄语或中文）...">
       <span id="word-count"></span>
+      <button id="dedup-words-btn" class="btn-small" style="background:var(--accent)">合并重复</button>
     </div>
     <div id="word-list-container" class="list-container"></div>
   </section>
@@ -80,6 +69,8 @@
     <div class="search-bar">
       <input type="text" id="sentence-search" placeholder="搜索句式...">
       <span id="sentence-count"></span>
+      <button id="dedup-sentences-btn" class="btn-small" style="background:var(--accent)">合并重复</button>
+      <button id="retro-correct-btn" class="btn-small" style="background:var(--accent)">纠正语法</button>
     </div>
     <div id="sentence-list-container" class="list-container"></div>
   </section>
@@ -96,12 +87,42 @@
         <div class="question-text" id="question-text"></div>
         <div class="options" id="options-container"></div>
         <div id="review-feedback"></div>
+        <div style="text-align:center;margin-top:8px">
+          <button id="stop-review-btn" class="btn-small" style="background:var(--muted)">停止本轮</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====== 学习 ====== -->
+  <section id="tab-learn" class="tab-content">
+    <div class="learn-subtabs">
+      <button class="learn-tab active" data-learn="word">学习单词</button>
+      <button class="learn-tab" data-learn="sentence">学习句式</button>
+    </div>
+    <div class="learn-level">
+      <label>难度：</label>
+      <select id="learn-level">
+        <option value="catti3">CATTI 三级（中等）</option>
+        <option value="catti2">CATTI 二级（较难）</option>
+      </select>
+    </div>
+    <div id="learn-area" class="form-card">
+      <button id="start-learn-btn" class="btn-primary btn-large">开始学习</button>
+      <div id="learn-question-area" style="display:none">
+        <div class="question-text" id="learn-question-text"></div>
+        <div class="options" id="learn-options"></div>
+        <div id="learn-feedback"></div>
+        <div style="margin-top:8px">
+          <button id="next-learn-btn" class="btn-primary" style="display:none">下一题</button>
+          <button id="stop-learn-btn" class="btn-small" style="background:var(--muted)">停止</button>
+        </div>
       </div>
     </div>
   </section>
 
 </main>
 
-<script src="/script.js"></script>
+<script src="/script.js?v=1.04"></script>
 </body>
 </html>

@@ -6,8 +6,10 @@
 import os
 import sys
 import json
+import random
 import webbrowser
 import threading
+import logger
 from flask import Flask, request, jsonify, send_from_directory
 import db
 import deepseek_client
@@ -44,27 +46,37 @@ def static_files(filename):
 def save_settings():
     data = request.get_json()
     key = data.get('api_key', '').strip()
+    persisted = False
     if key:
         deepseek_client.set_api_key(key)
-        _save_api_key(key)
-    return jsonify({"ok": True, "has_key": bool(key)})
+        persisted = _save_api_key(key)
+    return jsonify({
+        "ok": True,
+        "has_key": bool(key),
+        "persisted": persisted,
+    })
 
 
 @app.route('/api/settings', methods=['GET'])
 def get_settings():
-    return jsonify({"has_key": bool(deepseek_client.get_api_key())})
+    return jsonify({
+        "has_key": bool(deepseek_client.get_api_key()),
+        "settings_path": db.SETTINGS_PATH,
+        "file_exists": os.path.exists(db.SETTINGS_PATH),
+    })
 
 
 # ─── API Key 持久化 ───────────────────────────────────────────
 
-def _save_api_key(key: str):
-    """将 API Key 保存到本地文件"""
+def _save_api_key(key: str) -> bool:
+    """将 API Key 保存到本地文件，返回是否成功"""
     try:
         os.makedirs(os.path.dirname(db.SETTINGS_PATH), exist_ok=True)
         with open(db.SETTINGS_PATH, 'w') as f:
             json.dump({"api_key": key}, f)
+        return True
     except Exception:
-        pass  # 写入失败不影响使用
+        return False
 
 
 def _load_api_key() -> str | None:
@@ -81,6 +93,81 @@ def _load_api_key() -> str | None:
 
 # ─── 单词 API ─────────────────────────────────────────────────
 
+@app.route('/api/entry', methods=['POST'])
+def add_entry():
+    """统一录入 — 自动判断单词或句式，调用 DeepSeek 翻译/纠错"""
+    data = request.get_json()
+    text = data.get('text', '').strip()
+    if not text:
+        return jsonify({"error": "请输入俄语内容"}), 400
+
+    is_sentence = ' ' in text
+
+    if is_sentence:
+        # 句式录入
+        if db.sentence_exists(text):
+            logger.info(f"重复句式: {text[:50]}")
+            return jsonify({"error": "该句式已存在"}), 409
+
+        corrected = text
+        chinese = ""
+        examples = []
+        try:
+            if deepseek_client.get_api_key():
+                result = deepseek_client.correct_sentence(text)
+                corrected = result.get('corrected', text)
+                chinese = result.get('chinese', '')
+                examples = result.get('examples', [])
+        except Exception:
+            pass
+
+        sent_id = db.add_sentence(text, corrected, chinese, examples)
+        return jsonify({
+            "ok": True,
+            "type": "sentence",
+            "id": sent_id,
+            "original": text,
+            "corrected": corrected,
+            "chinese": chinese,
+            "examples": examples,
+            "is_corrected": corrected != text,
+        })
+
+    else:
+        # 单词录入（含拼写纠错）
+        corrected_russian = text
+        original_russian = text
+        chinese = ""
+        examples = []
+        try:
+            if deepseek_client.get_api_key():
+                result = deepseek_client.translate_word(text)
+                corrected_russian = result.get('russian', text)
+                chinese = result.get('chinese', '')
+                examples = result.get('examples', [])
+        except Exception:
+            pass
+
+        # 用正确拼写存储（如果已存在该正确拼写则拒绝）
+        if db.word_exists(corrected_russian):
+            return jsonify({"error": f"单词 '{corrected_russian}' 已存在"}), 409
+
+        word_id = db.add_word(corrected_russian, chinese, examples)
+        if word_id is None:
+            return jsonify({"error": "单词已存在"}), 409
+
+        return jsonify({
+            "ok": True,
+            "type": "word",
+            "id": word_id,
+            "russian": corrected_russian,
+            "chinese": chinese,
+            "examples": examples,
+            "is_corrected": corrected_russian != original_russian,
+            "original": original_russian if corrected_russian != original_russian else None,
+        })
+
+
 @app.route('/api/words', methods=['POST'])
 def add_word():
     """录入生词 — 自动调用 DeepSeek 获取翻译和例句"""
@@ -88,6 +175,8 @@ def add_word():
     russian = data.get('russian', '').strip()
     if not russian:
         return jsonify({"error": "请输入俄语单词"}), 400
+    if ' ' in russian:
+        return jsonify({"error": "检测到空格，请到「录入句式」添加句子"}), 400
 
     # 检查是否已存在
     if db.word_exists(russian):
@@ -129,6 +218,53 @@ def list_words():
     return jsonify({"words": words})
 
 
+@app.route('/api/words/dedup', methods=['POST'])
+def dedup_words():
+    """合并重复单词：保留翻译最完整的，合并答题统计"""
+    removed = db.dedup_words()
+    return jsonify({"ok": True, "removed": removed})
+
+
+@app.route('/api/sentences/dedup', methods=['POST'])
+def dedup_sentences():
+    """合并重复句式：保留翻译最完整的，合并答题统计"""
+    removed = db.dedup_sentences()
+    return jsonify({"ok": True, "removed": removed})
+
+
+@app.route('/api/sentences/retro-correct', methods=['POST'])
+def retro_correct():
+    """一键纠正所有未修正的句式"""
+    if not deepseek_client.get_api_key():
+        return jsonify({"error": "请先设置 API Key"}), 400
+
+    # 查找 corrected == original 的句式（未被修正过）
+    import db
+    conn = db.get_conn()
+    rows = conn.execute(
+        "SELECT * FROM sentences WHERE corrected = original OR corrected = ''"
+    ).fetchall()
+    conn.close()
+    uncorrected = [db._row_to_dict(r) for r in rows]
+
+    corrected_count = 0
+    for s in uncorrected:
+        try:
+            result = deepseek_client.correct_sentence(s['original'])
+            new_corrected = result.get('corrected', s['original'])
+            if new_corrected != s['original']:
+                db.update_sentence_correction(s['id'], new_corrected, result.get('chinese', s['chinese']), result.get('examples', s['examples']))
+                corrected_count += 1
+        except Exception:
+            pass
+
+    return jsonify({
+        "ok": True,
+        "corrected": corrected_count,
+        "total": len(uncorrected),
+    })
+
+
 @app.route('/api/words/retro-translate', methods=['POST'])
 def retro_translate():
     """补译所有缺少中文翻译的单词"""
@@ -140,22 +276,29 @@ def retro_translate():
         return jsonify({"ok": True, "translated": 0, "message": "所有单词已有翻译"})
 
     translated = 0
+    failures = 0
+    first_error = None
     for word in untranslated:
         try:
             result = deepseek_client.translate_word(word['russian'])
-            db.update_word_translation(
-                word['id'],
-                result.get('chinese', ''),
-                result.get('examples', [])
-            )
-            translated += 1
+            chinese = result.get('chinese', '').strip()
+            examples = result.get('examples', [])
+            if chinese:
+                db.update_word_translation(word['id'], chinese, examples)
+                translated += 1
+            else:
+                failures += 1
         except Exception as e:
-            pass  # 跳过翻译失败的单词
+            failures += 1
+            if first_error is None:
+                first_error = str(e)[:200]
 
     return jsonify({
         "ok": True,
         "translated": translated,
         "total": len(untranslated),
+        "failures": failures,
+        "first_error": first_error,
     })
 
 
@@ -255,11 +398,144 @@ def review_answer():
     })
 
 
+# ─── 学习 API ─────────────────────────────────────────────────
+
+@app.route('/api/learn/batch', methods=['POST'])
+def learn_batch():
+    """批量生成 10 道学习题（一次 API 调用）"""
+    if not deepseek_client.get_api_key():
+        return jsonify({"error": "请先设置 API Key"}), 400
+
+    data = request.get_json() or {}
+    level = data.get('level', 'catti3')
+    learn_type = data.get('type', 'word')
+    count = data.get('count', 10)
+
+    try:
+        if learn_type == 'word':
+            existing = db.get_words(limit=500)
+            existing_list = [w['russian'] for w in existing]
+            questions = deepseek_client.generate_word_batch(level, existing_list, count)
+        else:
+            existing = db.get_sentences(limit=500)
+            existing_list = [s['corrected'] or s['original'] for s in existing]
+            questions = deepseek_client.generate_sentence_batch(level, existing_list, count)
+
+        # 添加 type 字段
+        for q in questions:
+            q['type'] = learn_type
+
+        logger.info(f"学习批量生成完成: {len(questions)} 题")
+        return jsonify({"ok": True, "questions": questions})
+    except Exception as e:
+        logger.error(f"学习批量生成失败: {e}")
+        return jsonify({"ok": True, "questions": []})
+
+
+@app.route('/api/learn/question', methods=['POST'])
+def learn_question():
+    """生成一道三选一学习题（CATTI 2-3 级）"""
+    if not deepseek_client.get_api_key():
+        return jsonify({"error": "请先设置 API Key"}), 400
+
+    data = request.get_json() or {}
+    level = data.get('level', 'catti3')
+    learn_type = data.get('type', 'word')  # 'word' 或 'sentence'
+
+    if learn_type == 'word':
+        existing = db.get_words(limit=500)
+        existing_list = [w['russian'] for w in existing]
+        result = deepseek_client.generate_word_question(level, existing_list)
+        chinese = result['chinese']
+        # 用已有单词的翻译做干扰项
+        others = [w['chinese'] for w in existing if w['chinese'] and w['chinese'] != chinese]
+        if len(others) >= 2:
+            distractors = random.sample(others, 2)
+        else:
+            # AI 生成干扰翻译
+            try:
+                distractors = deepseek_client.generate_distractors(result['russian'], chinese)
+            except Exception:
+                distractors = ['[选项A]', '[选项B]']
+
+        options = [chinese] + distractors
+        random.shuffle(options)
+        correct_index = options.index(chinese)
+
+    else:
+        existing = db.get_sentences(limit=500)
+        existing_list = [s['corrected'] or s['original'] for s in existing]
+        result = deepseek_client.generate_sentence_question(level, existing_list)
+        chinese = result['chinese']
+        try:
+            distractors = deepseek_client.generate_distractors(result['russian'], chinese)
+        except Exception:
+            distractors = ['[选项A]', '[选项B]']
+
+        options = [chinese] + distractors
+        random.shuffle(options)
+        correct_index = options.index(chinese)
+
+    return jsonify({
+        "ok": True,
+        "russian": result['russian'],
+        "options": options,
+        "correct_index": correct_index,
+        "type": learn_type,
+    })
+
+
+@app.route('/api/learn/check', methods=['POST'])
+def learn_check():
+    """检查答案，答错自动录入数据库"""
+    data = request.get_json()
+    russian = data.get('russian', '').strip()
+    chosen = data.get('chosen', -1)
+    correct_index = data.get('correct_index', -1)
+    options = data.get('options', [])
+    learn_type = data.get('type', 'word')
+
+    is_correct = (chosen == correct_index)
+    correct_chinese = options[correct_index] if 0 <= correct_index < len(options) else ''
+
+    saved = False
+    if correct_chinese:
+        if learn_type == 'word':
+            if not db.word_exists(russian):
+                db.add_word(russian, correct_chinese, [])
+                saved = True
+        else:
+            if not db.sentence_exists(russian):
+                db.add_sentence(russian, russian, correct_chinese, [])
+                saved = True
+
+    return jsonify({
+        "is_correct": is_correct,
+        "correct_index": correct_index,
+        "correct_chinese": correct_chinese,
+        "saved": saved,
+    })
+
+
 # ─── 统计 API ─────────────────────────────────────────────────
+
+@app.route('/api/logs', methods=['GET'])
+def get_logs():
+    """返回最近 80 行日志"""
+    lines = request.args.get('lines', 80, type=int)
+    try:
+        if os.path.exists(logger.LOG_FILE):
+            with open(logger.LOG_FILE, encoding='utf-8') as f:
+                all_lines = f.readlines()
+                return jsonify({"log": ''.join(all_lines[-lines:])})
+    except Exception:
+        pass
+    return jsonify({"log": "暂无日志"})
+
 
 @app.route('/api/version', methods=['GET'])
 def get_version():
-    return jsonify({"version": "1.03"})
+    return jsonify({"version": "1.04"})
 
 
 @app.route('/api/stats', methods=['GET'])
@@ -276,7 +552,9 @@ def _open_browser():
 
 
 def main():
+    logger.info("俄语单词本 启动")
     db.init_db()
+    logger.info(f"数据库路径: {db.DB_PATH}")
     # 启动时加载持久化的 API Key
     saved_key = _load_api_key()
     if saved_key:

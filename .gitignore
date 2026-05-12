@@ -6,5 +6,6 @@ build/
 *.spec
 *.db
 data/
+settings.json
 .DS_Store
 AGENTS.md
