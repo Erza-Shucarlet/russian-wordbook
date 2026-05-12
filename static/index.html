@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>俄语单词本</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<header>
+  <h1>📖 俄语单词本</h1>
+  <div class="api-settings">
+    <input type="password" id="api-key-input" placeholder="DeepSeek API Key（可选）">
+    <button id="save-key-btn">保存</button>
+    <span id="key-status"></span>
+  </div>
+</header>
+
+<nav class="tabs">
+  <button class="tab active" data-tab="add-word">📝 录入生词</button>
+  <button class="tab" data-tab="add-sentence">📝 录入句式</button>
+  <button class="tab" data-tab="word-list">📚 单词库</button>
+  <button class="tab" data-tab="sentence-list">📚 句式库</button>
+  <button class="tab" data-tab="review">🎯 复习模式</button>
+</nav>
+
+<main>
+
+  <!-- ====== 录入生词 ====== -->
+  <section id="tab-add-word" class="tab-content active">
+    <div class="form-card">
+      <h2>录入俄语生词</h2>
+      <p class="hint">输入俄语单词（一格形式），系统自动获取中文翻译和例句</p>
+      <div class="form-row">
+        <input type="text" id="word-input" placeholder="输入俄语单词，如 книга" autofocus>
+        <button id="add-word-btn" class="btn-primary">录入</button>
+      </div>
+      <div id="word-result" class="result-area"></div>
+    </div>
+  </section>
+
+  <!-- ====== 录入句式 ====== -->
+  <section id="tab-add-sentence" class="tab-content">
+    <div class="form-card">
+      <h2>录入俄语句式</h2>
+      <p class="hint">输入俄语句子，系统自动修正语法并给出中文翻译</p>
+      <div class="form-row">
+        <input type="text" id="sentence-input" placeholder="输入俄语句子，如 Я читаю книга">
+        <button id="add-sentence-btn" class="btn-primary">录入</button>
+      </div>
+      <div id="sentence-result" class="result-area"></div>
+    </div>
+  </section>
+
+  <!-- ====== 单词库 ====== -->
+  <section id="tab-word-list" class="tab-content">
+    <div class="search-bar">
+      <input type="text" id="word-search" placeholder="搜索单词（俄语或中文）...">
+      <span id="word-count"></span>
+    </div>
+    <div id="word-list-container" class="list-container"></div>
+  </section>
+
+  <!-- ====== 句式库 ====== -->
+  <section id="tab-sentence-list" class="tab-content">
+    <div class="search-bar">
+      <input type="text" id="sentence-search" placeholder="搜索句式...">
+      <span id="sentence-count"></span>
+    </div>
+    <div id="sentence-list-container" class="list-container"></div>
+  </section>
+
+  <!-- ====== 复习模式 ====== -->
+  <section id="tab-review" class="tab-content">
+    <div id="review-container">
+      <div id="review-start">
+        <button id="start-review-btn" class="btn-primary btn-large">开始复习</button>
+        <div id="review-stats" class="stats"></div>
+      </div>
+      <div id="review-question" style="display:none">
+        <div class="question-label" id="question-label"></div>
+        <div class="question-text" id="question-text"></div>
+        <div class="options" id="options-container"></div>
+        <div id="review-feedback"></div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script src="/script.js"></script>
+</body>
+</html>
