@@ -15,7 +15,7 @@
 
 ### 使用（无需配置环境）
 
-1. 从 [Releases](../../releases) 页面下载 `俄语单词本_vX.XX.zip`
+1. 从 [Releases](../../releases) 页面下载最新版本 zip（如 `RussianWordbook_v1.01.zip`）
 2. 解压得到 `俄语单词本.app`
 3. 双击打开
 4. 浏览器自动打开 `http://127.0.0.1:8910`
