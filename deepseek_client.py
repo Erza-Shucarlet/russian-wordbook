@@ -58,13 +58,21 @@ def translate_word(russian_word: str) -> dict:
     翻译俄语单词并生成例句
     返回: { "chinese": "...", "examples": [{"ru": "...", "zh": "..."}, ...] }
     """
-    system = """你是俄语语言专家。用户给你一个俄语单词，你需要：
-1. 如果是名词，必须返回一格（主格）单数形式。检查拼写是否正确，如果错误或不是一格形式，给出正确的一格拼写，corrected=true；如果已经是一格且拼写正确，russian保持原样，corrected=false
-2. 给出该单词最常见的中文释义
-3. 给出 2 个使用正确形式的俄语例句及中文翻译
+    system = """你是俄语语言专家。任务：把用户输入规范化为可入库的俄语单词卡。
+规则：
+1. 只处理“单个俄语单词”；如果不是单词，也必须尽量返回最接近的合法单词形态
+2. 如果是名词，返回主格单数一格；若原词已正确则 corrected=false，否则 corrected=true
+3. chinese 给出最常见、最简洁的中文义项（优先 2-8 个汉字）
+4. examples 返回 2 条，且都使用你给出的 russian 形态
+5. 禁止输出 Markdown、注释、解释性文本
 
-必须以 JSON 格式返回：
-{"russian": "正确拼写", "corrected": true或false, "chinese": "中文释义", "examples": [{"ru": "俄语句子", "zh": "中文翻译"}, ...]}"""
+严格输出 JSON 对象（仅这些键）：
+{
+  "russian": "正确拼写或规范词形",
+  "corrected": true,
+  "chinese": "中文释义",
+  "examples": [{"ru": "俄语例句", "zh": "中文翻译"}, {"ru": "...", "zh": "..."}]
+}"""
 
     return _call_deepseek(system, f"请翻译以下俄语单词并生成例句：{russian_word}")
 
@@ -74,13 +82,19 @@ def correct_sentence(russian_sentence: str) -> dict:
     修正俄语句式并翻译
     返回: { "corrected": "...", "chinese": "...", "examples": [{"ru": "...", "zh": "..."}] }
     """
-    system = """你是俄语语言专家。用户给你一个俄语句子，你需要：
-1. 检查语法是否正确，如果有错误请修正；如果正确则保留原文
-2. 给出该句子的中文翻译
-3. 提供 1 个用法相似或关联的俄语句式及中文翻译
+    system = """你是俄语语言专家。任务：纠正并翻译俄语句子。
+规则：
+1. corrected 返回语法正确、自然的俄语句子；若原句本身正确可保持不变
+2. chinese 返回简体中文自然译文
+3. examples 返回 1 条相似句式（ru+zh）
+4. 禁止输出 Markdown、解释性文字
 
-必须以 JSON 格式返回：
-{"corrected": "修正后的俄语句子", "chinese": "中文翻译", "examples": [{"ru": "关联句式", "zh": "中文翻译"}]}"""
+严格输出 JSON 对象（仅这些键）：
+{
+  "corrected": "修正后的俄语句子",
+  "chinese": "中文翻译",
+  "examples": [{"ru": "关联句式", "zh": "中文翻译"}]
+}"""
 
     return _call_deepseek(system, f"请检查并修正以下俄语句子：{russian_sentence}")
 
@@ -91,9 +105,23 @@ def generate_distractors(russian_sentence: str, correct_chinese: str) -> list:
 要求：
 - 干扰项要接近原意，但有关键区别（如主语、宾语、动词、时态等某个细节故意译错）
 - 不能和正确翻译相同
-- 以 JSON 数组格式返回：["干扰项1", "干扰项2"]"""
+- 每个干扰项建议 4-18 个字
+- 禁止输出 Markdown、解释性文字
+- 以 JSON 对象返回：{"distractors": ["干扰项1", "干扰项2"]}"""
 
-    return _call_deepseek(system, f"俄语句子：{russian_sentence}\n正确翻译：{correct_chinese}\n请生成 2 个干扰项")
+    result = _call_deepseek(system, f"俄语句子：{russian_sentence}\n正确翻译：{correct_chinese}\n请生成 2 个干扰项")
+    if isinstance(result, dict):
+        items = result.get("distractors", [])
+    elif isinstance(result, list):
+        items = result
+    else:
+        items = []
+    cleaned = []
+    for x in items:
+        text = str(x).strip()
+        if text and text != correct_chinese and text not in cleaned:
+            cleaned.append(text)
+    return cleaned[:2]
 
 
 def generate_word_batch(level: str, exclude_words: list[str], count: int = 10) -> list:
@@ -108,10 +136,24 @@ def generate_word_batch(level: str, exclude_words: list[str], count: int = 10) -
 - 中文选项要简短，优先使用 2-8 个汉字
 - 单词的难度、长度应符合{level_desc}标准
 - 避开已有单词：[{exclude_list}]
-- 返回 JSON 数组：[{{"russian": "单词", "options": ["干扰1", "正确翻译", "干扰2"], "correct_index": 1}}]
-- 正确翻译必须随机放在 options 的不同位置，correct_index 必须准确对应"""
+- 每题 options 必须恰好 3 项，且三项互不相同
+- correct_index 必须是 0/1/2 且与正确中文严格对应
+- 禁止输出 Markdown、解释性文字
+- 返回 JSON 对象：
+{{
+  "questions": [
+    {{"russian": "单词", "options": ["干扰1", "正确翻译", "干扰2"], "correct_index": 1}}
+  ]
+}}"""
 
-    return _call_deepseek(system, f"请生成{count}道{level_desc}俄语单词选择题")
+    result = _call_deepseek(system, f"请生成{count}道{level_desc}俄语单词选择题")
+    if isinstance(result, dict):
+        questions = result.get("questions", [])
+    elif isinstance(result, list):
+        questions = result
+    else:
+        questions = []
+    return questions if isinstance(questions, list) else []
 
 
 def generate_sentence_batch(level: str, exclude_sentences: list[str], count: int = 10) -> list:
@@ -126,10 +168,24 @@ def generate_sentence_batch(level: str, exclude_sentences: list[str], count: int
 - 中文选项要简洁，不要解释语法
 - 句子的难度、复杂度应符合{level_desc}标准
 - 避开已有句子：[{exclude_list}]
-- 返回 JSON 数组：[{{"russian": "俄语句子", "options": ["干扰1", "正确翻译", "干扰2"], "correct_index": 1}}]
-- 正确翻译必须随机放在 options 的不同位置，correct_index 必须准确对应"""
+- 每题 options 必须恰好 3 项，且三项互不相同
+- correct_index 必须是 0/1/2 且与正确中文严格对应
+- 禁止输出 Markdown、解释性文字
+- 返回 JSON 对象：
+{{
+  "questions": [
+    {{"russian": "俄语句子", "options": ["干扰1", "正确翻译", "干扰2"], "correct_index": 1}}
+  ]
+}}"""
 
-    return _call_deepseek(system, f"请生成{count}道{level_desc}俄语句子选择题")
+    result = _call_deepseek(system, f"请生成{count}道{level_desc}俄语句子选择题")
+    if isinstance(result, dict):
+        questions = result.get("questions", [])
+    elif isinstance(result, list):
+        questions = result
+    else:
+        questions = []
+    return questions if isinstance(questions, list) else []
 
 
 def generate_word_question(level: str, exclude_words: list[str]) -> dict:
@@ -140,7 +196,8 @@ def generate_word_question(level: str, exclude_words: list[str]) -> dict:
     system = f"""你是俄语教学专家。请生成一个{level_desc}难度的俄语单词用于翻译练习。
 要求：
 - 随机一个单词，不要从已有列表里选：[{exclude_list}]
-- 返回该单词的一格形式和一两个字的简洁中文释义
+- 返回该单词的一格形式和简洁中文释义（2-8 个汉字）
+- 禁止输出 Markdown、解释性文字
 - 以 JSON 返回：{{"russian": "单词", "chinese": "中文释义"}}"""
 
     return _call_deepseek(system, f"请生成一个{level_desc}的俄语单词，避开：{exclude_list}")
@@ -155,6 +212,7 @@ def generate_sentence_question(level: str, exclude_sentences: list[str]) -> dict
 要求：
 - 随机一个句子，语法正确，不要和已有句子重复
 - 返回俄语句子和简洁中文翻译
+- 禁止输出 Markdown、解释性文字
 - 以 JSON 返回：{{"russian": "俄语句子", "chinese": "中文翻译"}}"""
 
     return _call_deepseek(system, f"请生成一个{level_desc}的俄语句子，避开：{exclude_list}")
@@ -165,6 +223,7 @@ def judge_answer(russian: str, correct_chinese: str, user_answer: str) -> bool:
     system = """你是俄语翻译评判专家。给你俄语原文、标准中文翻译和用户翻译，判断用户翻译是否正确。
 要求：
 - 核心意思一致即可，不要求字面完全一致
+- 只返回 JSON 对象，不要解释
 - 返回 JSON：{"correct": true或false}"""
 
     user_msg = f"俄语：{russian}\n标准翻译：{correct_chinese}\n用户翻译：{user_answer}"
@@ -178,6 +237,9 @@ def translate_sentence(russian_sentence: str) -> dict:
     返回: { "chinese": "..." }
     """
     system = """你是俄语翻译专家。请将用户给出的俄语句子翻译成中文。
-以 JSON 格式返回：{"chinese": "中文翻译"}"""
+要求：
+- 使用自然、简洁的简体中文
+- 只返回 JSON 对象，不要解释
+返回：{"chinese": "中文翻译"}"""
 
     return _call_deepseek(system, f"请翻译：{russian_sentence}")

@@ -120,13 +120,20 @@ def init_db():
 
 # ─── 单词 CRUD ────────────────────────────────────────────────
 
-def add_word(russian: str, chinese: str, examples: list) -> int:
+def add_word(russian: str, chinese: str, examples: list, correct_count: int = 0, wrong_count: int = 0) -> int:
     """添加单词，返回 id"""
     conn = get_conn()
     try:
         cur = conn.execute(
-            "INSERT INTO words (russian, russian_lower, chinese, examples) VALUES (?, ?, ?, ?)",
-            (russian.strip(), russian.strip().lower(), chinese.strip(), json.dumps(examples, ensure_ascii=False))
+            "INSERT INTO words (russian, russian_lower, chinese, examples, correct_count, wrong_count) VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                russian.strip(),
+                russian.strip().lower(),
+                chinese.strip(),
+                json.dumps(examples, ensure_ascii=False),
+                max(0, int(correct_count)),
+                max(0, int(wrong_count)),
+            )
         )
         conn.commit()
         return cur.lastrowid
@@ -207,12 +214,19 @@ def word_exists(russian: str) -> bool:
 
 # ─── 句式 CRUD ────────────────────────────────────────────────
 
-def add_sentence(original: str, corrected: str, chinese: str, examples: list) -> int:
+def add_sentence(original: str, corrected: str, chinese: str, examples: list, correct_count: int = 0, wrong_count: int = 0) -> int:
     """添加句式，返回 id"""
     conn = get_conn()
     cur = conn.execute(
-        "INSERT INTO sentences (original, corrected, chinese, examples) VALUES (?, ?, ?, ?)",
-        (original.strip(), corrected.strip(), chinese.strip(), json.dumps(examples, ensure_ascii=False))
+        "INSERT INTO sentences (original, corrected, chinese, examples, correct_count, wrong_count) VALUES (?, ?, ?, ?, ?, ?)",
+        (
+            original.strip(),
+            corrected.strip(),
+            chinese.strip(),
+            json.dumps(examples, ensure_ascii=False),
+            max(0, int(correct_count)),
+            max(0, int(wrong_count)),
+        )
     )
     conn.commit()
     rowid = cur.lastrowid

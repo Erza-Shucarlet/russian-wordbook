@@ -4,16 +4,21 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>小陈陈的俄语单词本</title>
-<link rel="stylesheet" href="/style.css?v=1.09">
+<link rel="stylesheet" href="/style.css?v=1.12">
 </head>
 <body>
 
 <header class="app-header">
   <div class="brand">
     <h1>小陈陈的俄语单词本</h1>
-    <span id="version-text" class="version-badge">v1.09</span>
+    <span id="version-text" class="version-badge">v1.12</span>
   </div>
   <div class="header-actions">
+    <select id="theme-select" class="theme-select" title="页面模式">
+      <option value="light">白天</option>
+      <option value="dark">黑夜</option>
+      <option value="eye">护眼</option>
+    </select>
     <button id="api-status-btn" class="api-status" title="点击设置 DeepSeek API Key">
       <span id="api-status-icon">⚠️</span>
       <span id="api-status-text">未激活</span>
@@ -120,6 +125,7 @@
         <div class="options" id="learn-options"></div>
         <div id="learn-feedback"></div>
         <div class="learn-stop-actions">
+          <button id="learn-next-btn" class="btn-small btn-secondary" style="display:none">下一题</button>
           <button id="stop-learn-btn" class="btn-small btn-muted">停止</button>
         </div>
       </div>
@@ -128,6 +134,6 @@
 
 </main>
 
-<script src="/script.js?v=1.09"></script>
+<script src="/script.js?v=1.12"></script>
 </body>
 </html>

@@ -8,6 +8,7 @@ import sys
 import json
 import random
 import time
+import re
 import webbrowser
 import threading
 import logger
@@ -129,6 +130,13 @@ def _load_api_key() -> str | None:
     return None
 
 
+def _is_valid_russian_word(text: str) -> bool:
+    """校验是否为合法俄语单词（只允许俄文字母与连字符）"""
+    if not text:
+        return False
+    return re.fullmatch(r"[А-Яа-яЁё-]+", text) is not None
+
+
 # ─── 单词 API ─────────────────────────────────────────────────
 
 @app.route('/api/entry', methods=['POST'])
@@ -173,6 +181,9 @@ def add_entry():
 
     else:
         # 单词录入（含拼写纠错）
+        if not _is_valid_russian_word(text):
+            return jsonify({"error": "录入错误：请只输入俄语单词（俄文字母），句子请在词间保留空格"}), 400
+
         corrected_russian = text
         original_russian = text
         chinese = ""
@@ -467,9 +478,56 @@ def review_answer():
 
 # ─── 学习 API ─────────────────────────────────────────────────
 
+def _normalize_learn_question(raw_q: dict) -> dict | None:
+    """清洗并校验学习题格式，非法则返回 None"""
+    if not isinstance(raw_q, dict):
+        return None
+
+    russian = str(raw_q.get('russian', '')).strip()
+    options = raw_q.get('options', [])
+    try:
+        correct_index = int(raw_q.get('correct_index', -1))
+    except Exception:
+        return None
+
+    if not russian or not isinstance(options, list):
+        return None
+    if correct_index < 0 or correct_index >= len(options):
+        return None
+
+    correct_val = str(options[correct_index]).strip()
+    if not correct_val:
+        return None
+
+    # 去空/去重，保留顺序
+    uniq_options = []
+    for opt in options:
+        text = str(opt).strip()
+        if text and text not in uniq_options:
+            uniq_options.append(text)
+
+    if correct_val not in uniq_options:
+        uniq_options.insert(0, correct_val)
+
+    # 必须能凑出三选一
+    if len(uniq_options) < 3:
+        return None
+
+    # 统一裁剪为 3 个选项，且保留正确项
+    if len(uniq_options) > 3:
+        others = [x for x in uniq_options if x != correct_val]
+        uniq_options = [correct_val] + others[:2]
+
+    return {
+        "russian": russian,
+        "options": uniq_options,
+        "correct_index": uniq_options.index(correct_val),
+    }
+
+
 @app.route('/api/learn/batch', methods=['POST'])
 def learn_batch():
-    """批量生成 10 道学习题（一次 API 调用）"""
+    """批量生成学习题（含结果校验与自动补题重试）"""
     if not deepseek_client.get_api_key():
         return jsonify({"error": "请先设置 API Key"}), 400
 
@@ -482,25 +540,55 @@ def learn_batch():
         if learn_type == 'word':
             existing = db.get_words(limit=500)
             existing_list = [w['russian'] for w in existing]
-            questions = deepseek_client.generate_word_batch(level, existing_list, count)
         else:
             existing = db.get_sentences(limit=500)
             existing_list = [s['corrected'] or s['original'] for s in existing]
-            questions = deepseek_client.generate_sentence_batch(level, existing_list, count)
 
-        # 添加 type 字段
-        # 安全网：后端始终打乱选项顺序，避免 AI 把正确答案放在固定位置
-        for q in questions:
-            q['type'] = learn_type
-            opts = q.get('options', [])
-            if len(opts) >= 3:
-                correct_idx = q.get('correct_index', 0)
-                correct_val = opts[correct_idx] if correct_idx < len(opts) else opts[0]
+        # 仅使用 API 批量生成，并做结果校验与补题重试
+        questions = []
+        seen_keys = set()
+        invalid_count = 0
+        max_rounds = 3
+
+        for _ in range(max_rounds):
+            remaining = count - len(questions)
+            if remaining <= 0:
+                break
+
+            runtime_excludes = existing_list + [q['russian'] for q in questions]
+            request_count = min(10, max(1, remaining))
+
+            if learn_type == 'word':
+                raw_questions = deepseek_client.generate_word_batch(level, runtime_excludes, request_count)
+            else:
+                raw_questions = deepseek_client.generate_sentence_batch(level, runtime_excludes, request_count)
+
+            for raw in raw_questions:
+                q = _normalize_learn_question(raw)
+                if q is None:
+                    invalid_count += 1
+                    continue
+
+                key = q['russian'].strip().lower()
+                if key in seen_keys:
+                    continue
+                seen_keys.add(key)
+
+                opts = q['options'][:]
+                correct_val = opts[q['correct_index']]
                 random.shuffle(opts)
-                q['correct_index'] = opts.index(correct_val)
                 q['options'] = opts
+                q['correct_index'] = opts.index(correct_val)
+                q['type'] = learn_type
 
-        logger.info(f"学习批量生成完成: {len(questions)} 题")
+                questions.append(q)
+                if len(questions) >= count:
+                    break
+
+        if len(questions) < count:
+            logger.warn(f"学习批量补题后仍不足: 需要 {count} 题，实际 {len(questions)} 题，丢弃无效 {invalid_count} 题")
+
+        logger.info(f"学习批量生成完成: {len(questions)} 题（API）")
         return jsonify({"ok": True, "questions": questions})
     except Exception as e:
         logger.error(f"学习批量生成失败: {e}")
@@ -520,26 +608,22 @@ def learn_question():
     if learn_type == 'word':
         existing = db.get_words(limit=500)
         existing_list = [w['russian'] for w in existing]
+    else:
+        existing = db.get_sentences(limit=500)
+        existing_list = [s['corrected'] or s['original'] for s in existing]
+
+    if learn_type == 'word':
         result = deepseek_client.generate_word_question(level, existing_list)
         chinese = result['chinese']
-        # 用已有单词的翻译做干扰项
         others = [w['chinese'] for w in existing if w['chinese'] and w['chinese'] != chinese]
         if len(others) >= 2:
             distractors = random.sample(others, 2)
         else:
-            # AI 生成干扰翻译
             try:
                 distractors = deepseek_client.generate_distractors(result['russian'], chinese)
             except Exception:
                 distractors = ['[选项A]', '[选项B]']
-
-        options = [chinese] + distractors
-        random.shuffle(options)
-        correct_index = options.index(chinese)
-
     else:
-        existing = db.get_sentences(limit=500)
-        existing_list = [s['corrected'] or s['original'] for s in existing]
         result = deepseek_client.generate_sentence_question(level, existing_list)
         chinese = result['chinese']
         try:
@@ -547,9 +631,9 @@ def learn_question():
         except Exception:
             distractors = ['[选项A]', '[选项B]']
 
-        options = [chinese] + distractors
-        random.shuffle(options)
-        correct_index = options.index(chinese)
+    options = [chinese] + distractors
+    random.shuffle(options)
+    correct_index = options.index(chinese)
 
     return jsonify({
         "ok": True,
@@ -577,11 +661,22 @@ def learn_check():
     if correct_chinese:
         if learn_type == 'word':
             if not db.word_exists(russian):
-                db.add_word(russian, correct_chinese, [])
+                db.add_word(
+                    russian,
+                    correct_chinese,
+                    [],
+                    wrong_count=1 if not is_correct else 0,
+                )
                 saved = True
         else:
             if not db.sentence_exists(russian):
-                db.add_sentence(russian, russian, correct_chinese, [])
+                db.add_sentence(
+                    russian,
+                    russian,
+                    correct_chinese,
+                    [],
+                    wrong_count=1 if not is_correct else 0,
+                )
                 saved = True
 
     return jsonify({
@@ -610,7 +705,7 @@ def get_logs():
 
 @app.route('/api/version', methods=['GET'])
 def get_version():
-    return jsonify({"version": "1.09"})
+    return jsonify({"version": "1.12"})
 
 
 @app.route('/api/stats', methods=['GET'])

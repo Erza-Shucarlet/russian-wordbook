@@ -19,6 +19,44 @@
   --radius: 8px;
 }
 
+body[data-theme="dark"] {
+  --bg: #0f141c;
+  --surface: #192231;
+  --surface-soft: #232e40;
+  --text: #e7edf7;
+  --muted: #a8b3c6;
+  --subtle: #8a95aa;
+  --accent: #4f8cff;
+  --accent-hover: #76a5ff;
+  --accent-soft: #1d2e4a;
+  --success: #59c88a;
+  --success-soft: #163427;
+  --danger: #ff8c8c;
+  --danger-soft: #3c2124;
+  --border: #33435d;
+  --border-strong: #425678;
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+body[data-theme="eye"] {
+  --bg: #edf4e3;
+  --surface: #f8faef;
+  --surface-soft: #f0f4e2;
+  --text: #293125;
+  --muted: #5c6854;
+  --subtle: #7b866f;
+  --accent: #3f6f2a;
+  --accent-hover: #2e581d;
+  --accent-soft: #e4efda;
+  --success: #2d6e2b;
+  --success-soft: #e4f1dd;
+  --danger: #b44a34;
+  --danger-soft: #f7e8e3;
+  --border: #cad8bb;
+  --border-strong: #b6c6a4;
+  --shadow: 0 10px 25px rgba(73, 87, 63, 0.12);
+}
+
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
@@ -51,7 +89,7 @@ button:active {
 input,
 select {
   color: var(--text);
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   outline: none;
@@ -114,6 +152,16 @@ select:focus {
   font-size: 0.84rem;
   font-weight: 600;
   white-space: nowrap;
+}
+
+.theme-select {
+  min-height: 34px;
+  padding: 6px 10px;
+  font-size: 0.84rem;
+  font-weight: 600;
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--muted);
 }
 
 .api-status {
@@ -193,8 +241,8 @@ select:focus {
   gap: 4px;
   padding: 4px;
   margin-bottom: 22px;
-  background: #e9eef6;
-  border: 1px solid #dde5f0;
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
   border-radius: 10px;
   overflow-x: auto;
 }
@@ -291,7 +339,7 @@ select:focus {
 
 .btn-secondary:hover {
   border-color: var(--border-strong);
-  background: #fff;
+  background: var(--surface);
 }
 
 .btn-large {
@@ -380,7 +428,7 @@ select:focus {
 
 .result-area .example-item {
   padding: 9px 10px;
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
 }
@@ -658,8 +706,8 @@ select:focus {
   gap: 4px;
   padding: 4px;
   margin-bottom: 12px;
-  background: #e9eef6;
-  border: 1px solid #dde5f0;
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
   border-radius: 10px;
 }
 
@@ -745,7 +793,7 @@ select:focus {
   margin-top: 14px;
   overflow: hidden;
   border-radius: 999px;
-  background: #e5ebf4;
+  background: var(--border);
 }
 
 .loading-bar::after {

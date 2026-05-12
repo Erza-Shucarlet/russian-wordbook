@@ -7,9 +7,11 @@ let reviewQuestion = null;  // 当前复习题
 let reviewCount = 0;       // 本轮已答题数
 let reviewCorrect = 0;     // 本轮正确数
 const REVIEW_ROUND = 10;   // 每轮题数
+const THEME_STORAGE_KEY = 'russian_wordbook_theme';
 
 // ─── 初始化 ─────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
+  initTheme();
   initTabs();
   initSettings();
   initAddEntry();
@@ -72,6 +74,36 @@ function escapeHtml(value) {
     '"': '&quot;',
     "'": '&#39;',
   }[c]));
+}
+
+function initTheme() {
+  const select = document.getElementById('theme-select');
+  if (!select) return;
+
+  const validThemes = new Set(['light', 'dark', 'eye']);
+  let theme = 'light';
+
+  try {
+    const saved = localStorage.getItem(THEME_STORAGE_KEY);
+    if (saved && validThemes.has(saved)) {
+      theme = saved;
+    }
+  } catch (e) {}
+
+  select.value = theme;
+  applyTheme(theme);
+
+  select.addEventListener('change', () => {
+    const nextTheme = validThemes.has(select.value) ? select.value : 'light';
+    applyTheme(nextTheme);
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
+    } catch (e) {}
+  });
+}
+
+function applyTheme(theme) {
+  document.body.setAttribute('data-theme', theme);
 }
 
 // ─── 设置 ──────────────────────────────
@@ -563,7 +595,9 @@ function initLearn() {
   });
 
   document.getElementById('start-learn-btn').addEventListener('click', startLearn);
+  document.getElementById('learn-next-btn').addEventListener('click', nextLearnQuestion);
   document.getElementById('stop-learn-btn').addEventListener('click', stopLearn);
+  document.getElementById('learn-level').addEventListener('change', onLearnLevelChange);
 }
 
 let learnTotal = 0;
@@ -614,6 +648,10 @@ async function fillLearnPool(count = LEARN_REFILL_COUNT, requestType = learnType
       signal: controller.signal,
     });
     const result = await resp.json();
+    // 丢弃过期请求：避免切换难度后旧难度题目混入题池
+    if (requestLevel !== learnLevelCache) {
+      return 0;
+    }
     if (result.questions) {
       learnPool[requestType].push(...result.questions);
     }
@@ -645,6 +683,7 @@ async function startLearn() {
   document.getElementById('learn-question-area').style.display = 'block';
   document.getElementById('learn-feedback').innerHTML = '';
   document.getElementById('learn-feedback').className = '';
+  document.getElementById('learn-next-btn').style.display = 'none';
   document.getElementById('stop-learn-btn').style.display = '';
   showLearnLoading();
   document.getElementById('learn-options').innerHTML = '';
@@ -677,6 +716,7 @@ async function switchLearnType(nextType) {
   learnLevelCache = document.getElementById('learn-level').value;
   document.getElementById('learn-feedback').innerHTML = '';
   document.getElementById('learn-feedback').className = '';
+  document.getElementById('learn-next-btn').style.display = 'none';
   document.getElementById('stop-learn-btn').style.display = '';
 
   const cached = learnStateCache[nextType];
@@ -710,6 +750,7 @@ async function switchLearnType(nextType) {
 }
 
 async function nextLearnQuestion() {
+  document.getElementById('learn-next-btn').style.display = 'none';
   document.getElementById('learn-feedback').innerHTML = '';
   document.getElementById('learn-feedback').className = '';
   document.getElementById('stop-learn-btn').style.display = '';
@@ -735,6 +776,7 @@ async function nextLearnQuestion() {
 }
 
 function showLearnQuestion(q) {
+  document.getElementById('learn-next-btn').style.display = 'none';
   const questionEl = document.getElementById('learn-question-text');
   questionEl.textContent = q.russian;
   questionEl.classList.toggle('long-question', isLongQuestion(q.russian));
@@ -776,18 +818,20 @@ async function submitLearn(chosen) {
   if (result.is_correct) {
     fb.className = 'correct';
     fb.innerHTML = '✅ 正确！';
+    clearLearnAutoNext();
+    learnAutoNextTimer = setTimeout(() => {
+      learnAutoNextTimer = null;
+      nextLearnQuestion();
+    }, 800);
   } else {
     fb.className = 'wrong';
     fb.innerHTML = `❌ 错误<br>正确：${escapeHtml(result.correct_chinese)}${result.saved ? '<br>📝 已自动录入' : ''}`;
+    document.getElementById('learn-next-btn').style.display = '';
   }
 
-  document.getElementById('stop-learn-btn').style.display = 'none';
-  // 自动跳转下一题
-  clearLearnAutoNext();
-  learnAutoNextTimer = setTimeout(() => {
-    learnAutoNextTimer = null;
-    nextLearnQuestion();
-  }, 800);
+  if (!result.is_correct) {
+    clearLearnAutoNext();
+  }
 }
 
 function stopLearn() {
@@ -815,6 +859,7 @@ function stopLearn() {
   document.getElementById('learn-options').innerHTML = '';
   document.getElementById('learn-feedback').innerHTML = `<button class="btn-primary" onclick="startLearn()">继续学习</button>`;
   document.getElementById('learn-feedback').className = '';
+  document.getElementById('learn-next-btn').style.display = 'none';
   document.getElementById('stop-learn-btn').style.display = 'none';
   learnTotal = 0;
   learnCorrect = 0;
@@ -823,6 +868,44 @@ function stopLearn() {
 function resetLearn() {
   learnTotal = 0;
   learnCorrect = 0;
+}
+
+async function onLearnLevelChange() {
+  const nextLevel = document.getElementById('learn-level').value;
+  if (nextLevel === learnLevelCache) return;
+  learnLevelCache = nextLevel;
+
+  clearLearnAutoNext();
+  // 难度变更后，清空所有缓存，避免旧难度题目残留
+  learnPool = { word: [], sentence: [] };
+  learnStateCache = { word: null, sentence: null };
+  poolLoading = { word: false, sentence: false };
+  learnState = null;
+
+  if (!isLearnRunning()) return;
+
+  document.getElementById('learn-feedback').innerHTML = '';
+  document.getElementById('learn-feedback').className = '';
+  document.getElementById('learn-next-btn').style.display = 'none';
+  document.getElementById('stop-learn-btn').style.display = '';
+  showLearnLoading('正在切换难度并生成新题');
+  document.getElementById('learn-options').innerHTML = '';
+
+  await fillLearnPool(LEARN_INITIAL_COUNT, learnTypeCache, learnLevelCache);
+  const q = nextFromPool() || (await fillLearnPool(LEARN_INITIAL_COUNT, learnTypeCache, learnLevelCache), nextFromPool());
+  if (!q) {
+    document.getElementById('learn-question-text').textContent = '出题失败，请检查网络或 API Key';
+    document.getElementById('learn-question-text').classList.remove('long-question');
+    document.getElementById('learn-options').innerHTML = '';
+    return;
+  }
+
+  learnState = q;
+  learnStateCache[learnTypeCache] = q;
+  showLearnQuestion(q);
+  if (learnPool[learnTypeCache].length < LEARN_LOW_WATER) {
+    fillLearnPool(LEARN_REFILL_COUNT, learnTypeCache, learnLevelCache);
+  }
 }
 
 // ─── 反馈 ──────────────────────────────
